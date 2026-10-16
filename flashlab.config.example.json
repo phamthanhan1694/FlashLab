@@ -1,0 +1,28 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "apiPort": 43871,
+    "webPort": 43891,
+    "portSearchLimit": 20
+  },
+  "storage": {
+    "directory": "data/profiles",
+    "legacyDataFile": "data/state.json"
+  },
+  "study": {
+    "autoAdvanceSeconds": 5,
+    "completionPercent": 80,
+    "historyPageSize": 5,
+    "testQuestionLimit": 16,
+    "matchPairLimit": 6
+  },
+  "defaults": {
+    "theme": "system",
+    "audio": {
+      "music": true,
+      "effects": true,
+      "volume": 0.6,
+      "musicVolume": 1
+    }
+  }
+}

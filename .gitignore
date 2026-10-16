@@ -1,0 +1,14 @@
+node_modules/
+**/dist/
+.env
+.env.*
+!.env.example
+data/
+coverage/
+*.log
+*:Zone.Identifier*
+
+start-flashcard-path.txt
+
+# Machine-specific runtime settings
+flashlab.config.json

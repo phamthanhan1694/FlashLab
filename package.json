@@ -1,0 +1,31 @@
+{
+  "name": "flashlab",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.14.0"
+  },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env scripts/dev.mjs",
+    "typecheck": "npm run build -w @flashlab/shared && npm run typecheck --workspaces --if-present",
+    "build": "node scripts/clean.mjs && npm run build -w @flashlab/shared && npm run build -w @flashlab/frontend && npm run build -w @flashlab/backend",
+    "start": "node --env-file-if-exists=.env scripts/start.mjs",
+    "test": "npm run build -w @flashlab/shared && npm run test --workspaces --if-present",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test:ui": "node --test scripts/smoke-ui.mjs scripts/smoke-profiles.mjs",
+    "test:server": "node --test scripts/smoke-server.mjs",
+    "dev:services": "npm run build -w @flashlab/shared && concurrently -k -n api,web \"npm run dev -w @flashlab/backend\" \"npm run dev -w @flashlab/frontend\"",
+    "test:config": "node --test scripts/config.test.mjs scripts/readiness.test.mjs scripts/smoke-dev.mjs"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "concurrently": "^9.2.1",
+    "prettier": "^3.6.2"
+  }
+}
