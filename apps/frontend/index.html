@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f7f8fe" />
+    <meta
+      name="description"
+      content="FlashLab – Ứng dụng học Flashcards offline, nhiều chế độ luyện tập và ôn tập ngắt quãng."
+    />
+    <script>
+      try {
+        const theme = localStorage.getItem('flashlab.theme');
+        document.documentElement.dataset.theme =
+          theme === 'dark' || theme === 'light'
+            ? theme
+            : window.matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'dark'
+              : 'light';
+      } catch {}
+    </script>
+    <title>FlashLab — Học theo cách của bạn</title>
+    <link rel="stylesheet" href="/src/ui/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="sidebar" id="sidebar">
+        <a class="brand" href="#/" id="brand-home" aria-label="Về trang chủ">
+          <span class="brand-mark" aria-hidden="true"
+            ><span></span><span></span
+          ></span>
+          <span
+            ><strong>FlashLab<span class="brand-dot">.</span></strong
+            ><small>STUDY SMARTER</small></span
+          >
+        </a>
+        <nav class="side-nav" aria-label="Điều hướng chính">
+          <button
+            type="button"
+            data-nav="home"
+            aria-label="Tổng quan"
+            title="Tổng quan"
+            class="nav-link active"
+            id="nav-home"
+          >
+            <span class="nav-icon" data-icon="house"></span
+            ><span>Tổng quan</span>
+          </button>
+          <button
+            type="button"
+            data-nav="library"
+            aria-label="Thư viện học phần"
+            title="Thư viện học phần"
+            class="nav-link"
+            id="nav-library"
+          >
+            <span class="nav-icon" data-icon="layers"></span
+            ><span>Thư viện học phần</span>
+          </button>
+          <button
+            type="button"
+            data-nav="classes"
+            aria-label="Lớp học"
+            title="Lớp học"
+            class="nav-link"
+            id="nav-classes"
+          >
+            <span class="nav-icon" data-icon="classroom"></span
+            ><span>Lớp học</span>
+          </button>
+          <button
+            type="button"
+            data-nav="review"
+            aria-label="Ôn tập đến hạn"
+            title="Ôn tập đến hạn"
+            class="nav-link"
+            id="nav-review"
+          >
+            <span class="nav-icon" data-icon="repeat"></span
+            ><span>Ôn tập đến hạn</span
+            ><span id="due-pill" class="nav-count">0</span>
+          </button>
+        </nav>
+        <div class="topbar-right">
+          <details id="settings" class="settings">
+            <summary class="icon-button" aria-label="Cài đặt" title="Cài đặt">
+              <span data-icon="settings"></span>
+            </summary>
+            <section class="settings-panel" aria-label="Cài đặt">
+              <div class="settings-heading">
+                <h2>Cài đặt</h2>
+                <button
+                  type="button"
+                  class="icon-button"
+                  id="settings-close"
+                  aria-label="Đóng cài đặt"
+                >
+                  <span data-icon="close"></span>
+                </button>
+              </div>
+              <div class="settings-section">
+                <h3>Ngôn ngữ</h3>
+                <div
+                  class="language-options theme-options"
+                  role="group"
+                  aria-label="Ngôn ngữ"
+                >
+                  <button
+                    type="button"
+                    data-language="vi"
+                    aria-label="Tiếng Việt"
+                  >
+                    VN</button
+                  ><button
+                    type="button"
+                    data-language="en"
+                    aria-label="English"
+                  >
+                    EN
+                  </button>
+                </div>
+              </div>
+              <div class="settings-section">
+                <h3>Giao diện</h3>
+                <div
+                  class="theme-options"
+                  role="group"
+                  aria-label="Chế độ giao diện"
+                >
+                  <button
+                    type="button"
+                    data-theme="light"
+                    aria-label="Giao diện sáng"
+                  >
+                    <span data-icon="sun"></span><span>Sáng</span>
+                  </button>
+                  <button
+                    type="button"
+                    data-theme="dark"
+                    aria-label="Giao diện tối"
+                  >
+                    <span data-icon="moon"></span><span>Tối</span>
+                  </button>
+                  <button
+                    type="button"
+                    data-theme="system"
+                    aria-label="Giao diện theo hệ thống"
+                  >
+                    <span data-icon="monitor"></span><span>Hệ thống</span>
+                  </button>
+                </div>
+              </div>
+              <div id="audio-settings-mount" class="settings-section"></div>
+              <div class="settings-section speech-settings">
+                <h3>Giọng đọc</h3>
+                <div class="speech-rate-heading">
+                  <label for="speech-rate">Tốc độ đọc</label
+                  ><output
+                    id="speech-rate-value"
+                    for="speech-rate"
+                    data-user-content
+                    >0.75×</output
+                  >
+                </div>
+                <input
+                  id="speech-rate"
+                  type="range"
+                  min="0.5"
+                  max="1.5"
+                  step="0.05"
+                  value="0.75"
+                />
+                <p>
+                  Mặc định 0.75×. Kéo sang trái để đọc chậm hơn; 1× là tốc độ
+                  bình thường. Lưu riêng cho người dùng hiện tại.
+                </p>
+                <button
+                  type="button"
+                  class="btn outline small"
+                  data-speak="Hello. Welcome to FlashLab."
+                  data-speech-language="en-US"
+                >
+                  Nghe thử tốc độ
+                </button>
+              </div>
+              <div class="settings-section">
+                <h3>Dữ liệu người dùng</h3>
+                <button
+                  type="button"
+                  class="btn outline settings-export"
+                  id="settings-export"
+                >
+                  <span data-icon="download"></span> Xuất thư mục ZIP
+                </button>
+                <p
+                  id="settings-export-status"
+                  class="help-note"
+                  role="status"
+                ></p>
+              </div>
+              <a
+                class="section-link help-link"
+                data-help-link
+                href="#/home/guide/backup"
+                >Xem hướng dẫn tại Tổng quan →</a
+              >
+              <p id="sync-status" class="settings-sync" role="status">
+                Đang kết nối…
+              </p>
+            </section>
+          </details>
+          <div class="avatar" title="Dữ liệu của bạn lưu trên thiết bị">FL</div>
+        </div>
+      </header>
+      <div class="main-column">
+        <main
+          class="content"
+          id="content"
+          tabindex="-1"
+          aria-live="polite"
+        ></main>
+        <footer class="footer-note">
+          FlashLab · Dữ liệu lưu trên máy chủ và bộ nhớ trình duyệt.
+        </footer>
+      </div>
+    </div>
+    <div id="modal-root"></div>
+    <div id="toast-root"></div>
+    <input
+      id="csv-file"
+      type="file"
+      accept=".xlsx,.csv,.tsv,.txt,text/csv,text/tab-separated-values"
+      hidden
+    />
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
