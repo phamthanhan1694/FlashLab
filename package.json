@@ -21,11 +21,21 @@
     "test:ui": "node --test scripts/smoke-ui.mjs scripts/smoke-profiles.mjs",
     "test:server": "node --test scripts/smoke-server.mjs",
     "dev:services": "npm run build -w @flashlab/shared && concurrently -k -n api,web \"npm run dev -w @flashlab/backend\" \"npm run dev -w @flashlab/frontend\"",
-    "test:config": "node --test scripts/config.test.mjs scripts/readiness.test.mjs scripts/smoke-dev.mjs"
+    "test:config": "node --test scripts/config.test.mjs scripts/readiness.test.mjs scripts/smoke-dev.mjs",
+    "tauri": "node scripts/tauri.mjs",
+    "desktop:dev": "node scripts/tauri.mjs dev",
+    "desktop:build": "node scripts/tauri.mjs build",
+    "desktop:prepare": "node scripts/desktop-prepare.mjs",
+    "test:desktop": "node --test scripts/smoke-desktop.mjs",
+    "android:init": "node scripts/tauri.mjs android init",
+    "android:dev": "node scripts/tauri.mjs android dev",
+    "android:build": "node scripts/tauri.mjs android build"
   },
   "devDependencies": {
-    "typescript": "~5.9.3",
+    "@tauri-apps/cli": "^2.12.3",
     "concurrently": "^9.2.1",
-    "prettier": "^3.6.2"
+    "esbuild": "^0.28.2",
+    "prettier": "^3.6.2",
+    "typescript": "~5.9.3"
   }
 }

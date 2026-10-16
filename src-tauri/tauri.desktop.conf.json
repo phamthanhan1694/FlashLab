@@ -1,0 +1,14 @@
+{
+  "build": {
+    "beforeDevCommand": "npm run desktop:prepare",
+    "beforeBuildCommand": "npm run desktop:prepare"
+  },
+  "bundle": {
+    "externalBin": ["binaries/flashlab-node"],
+    "resources": {
+      "resources/backend.mjs": "backend.mjs",
+      "resources/config.example.json": "config.example.json",
+      "resources/frontend/": "frontend/"
+    }
+  }
+}

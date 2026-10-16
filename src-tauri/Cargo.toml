@@ -1,0 +1,20 @@
+[package]
+name = "flashlab"
+version = "1.0.0"
+description = "FlashLab study application"
+edition = "2021"
+rust-version = "1.90"
+
+[lib]
+name = "flashlab_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+serde_json = "1"
+tauri-plugin-single-instance = "2"

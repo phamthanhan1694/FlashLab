@@ -1,0 +1,40 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color-scheme: light dark;
+  background: light-dark(#f5f7fb, #141820);
+  color: light-dark(#17243c, #e8eefb);
+}
+body {
+  min-height: 100vh;
+  margin: 0;
+  display: grid;
+  place-items: center;
+}
+main {
+  text-align: center;
+  padding: 32px;
+  max-width: 640px;
+  overflow-wrap: anywhere;
+}
+.mark {
+  margin: auto;
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 22px;
+  background: #3b6ded;
+  color: white;
+  font-size: 40px;
+  font-weight: 700;
+}
+h1 {
+  font-size: 30px;
+}
+p {
+  line-height: 1.7;
+}
+#startup-error {
+  color: light-dark(#a72b32, #ffb4b8);
+  white-space: pre-wrap;
+}

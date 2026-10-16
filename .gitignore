@@ -12,3 +12,9 @@ start-flashcard-path.txt
 
 # Machine-specific runtime settings
 flashlab.config.json
+
+# Tauri generated artifacts and platform-local builds
+src-tauri/target/
+src-tauri/resources/
+src-tauri/binaries/
+src-tauri/gen/
