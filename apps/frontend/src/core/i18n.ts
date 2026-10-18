@@ -2,6 +2,45 @@ import { partOptions, formatPartOfSpeech } from './parts-of-speech';
 export type Language = 'vi' | 'en';
 let language: Language = 'vi';
 const phrases: Record<string, string> = {
+  'Sao lưu hồ sơ (.sqlite)': 'Back up profile (.sqlite)',
+  'Sao lưu toàn bộ (.sqlite)': 'Back up everything (.sqlite)',
+  'Khôi phục từ database': 'Restore from database',
+  'Khôi phục database': 'Restore database',
+  'Khôi phục database?': 'Restore database?',
+  'Khôi phục': 'Restore',
+  'Chọn database': 'Choose database',
+  'Chọn bản sao lưu SQLite của một hồ sơ hoặc toàn bộ dữ liệu.':
+    'Choose a SQLite backup of one profile or all data.',
+  'Đang chuẩn bị database…': 'Preparing database…',
+  'Đã tải database hồ sơ.': 'Profile database downloaded.',
+  'Đã sao lưu database hồ sơ.': 'Profile database backed up.',
+  'Đã tải database toàn bộ dữ liệu.': 'Full database downloaded.',
+  'Đã sao lưu toàn bộ hồ sơ, bài viết và ảnh.':
+    'All profiles, posts and images backed up.',
+  'Xuất database thất bại.': 'Database export failed.',
+  'Không xuất được database. Hãy kiểm tra dữ liệu và thử lại.':
+    'Could not export the database. Check your data and try again.',
+  'Không khôi phục được database.': 'Could not restore the database.',
+  'Tệp database vượt quá 100 MB.': 'The database file exceeds 100 MB.',
+  'Tệp không phải database SQLite hợp lệ.':
+    'This is not a valid SQLite database.',
+  'Không đọc được thông tin bản sao lưu.': 'Could not read the backup details.',
+  'Không có tài khoản, không gửi thẻ lên Internet. Sao lưu database trong Cài đặt hoặc khôi phục database qua menu người dùng.':
+    'No account needed. Your cards stay local. Back up the database in Settings or restore a database from the user menu.',
+  'Mỗi hồ sơ có dữ liệu riêng. Trong Cài đặt, chọn Sao lưu hồ sơ để giữ dữ liệu của một người, hoặc Sao lưu toàn bộ để giữ mọi hồ sơ, bài viết và ảnh dùng chung trong một file .sqlite.':
+    'Each profile has separate data. In Settings, choose Back up profile for one person, or Back up everything to keep all profiles, shared posts and images in a single .sqlite file.',
+  'Chọn Khôi phục từ database trong Cài đặt hoặc menu người dùng rồi chọn file .sqlite. Kiểm tra phạm vi trước khi xác nhận. Khôi phục toàn bộ thay dữ liệu hiện tại; khôi phục một hồ sơ giữ lại các hồ sơ khác. Bản sao trước khi khôi phục được tự lưu trong restore-backups.':
+    'Choose Restore from database in Settings or the user menu, then select a .sqlite file. Review the scope before confirming. A full restore replaces current data; a profile restore preserves other profiles. A recovery copy is saved automatically in restore-backups.',
+  'SQLite giữ hồ sơ, thẻ nhiều nghĩa, ảnh, lớp học, tiến độ, lịch sử và kết quả từng câu, cấu hình, ghi chú và bài viết. File JSON và ảnh cũ được giữ nguyên sau khi chuyển đổi.':
+    'SQLite keeps profiles, multiple card meanings, images, classes, progress, history and individual answers, settings, notes and posts. Legacy JSON and image files are retained after migration.',
+  'Không cần giải nén hoặc ghép file JSON. Nhập thư mục CSV và bản sao lưu cũ vẫn được hỗ trợ. Cổng dịch vụ và đường dẫn lưu trữ của máy hiện tại không thay đổi khi khôi phục database.':
+    'No extraction or JSON assembly is needed. CSV folders and legacy backups can still be imported. Restoring a database preserves this device’s service ports and storage paths.',
+  'Vào Cài đặt → Xuất thư mục ZIP. Để khôi phục, giải nén ZIP, mở menu người dùng → Nhập thư mục người dùng rồi chọn thư mục vừa giải nén. ZIP giữ dữ liệu của hồ sơ và ghi chú cá nhân. Muốn sao lưu cả bài viết và ảnh dùng chung, hãy thoát ứng dụng rồi sao chép toàn bộ thư mục lưu trữ.':
+    'Go to Settings → Export ZIP folder. To restore, extract the ZIP, open the user menu → Import user folder and select the extracted folder. The ZIP keeps profile data and personal notes. To also back up shared articles and images, close the application and copy the entire storage directory.',
+  'Dữ liệu học và bài viết được lưu trong flashlab.sqlite. Mỗi hồ sơ có dữ liệu riêng; file JSON cũ được giữ lại sau khi chuyển đổi.':
+    'Study data and articles are stored in flashlab.sqlite. Each profile has separate data; old JSON files are retained after migration.',
+  'CSV và state.json được tạo khi xuất ZIP. Muốn áp dụng thay đổi CSV bên ngoài, hãy nhập lại qua giao diện.':
+    'CSV and state.json are created when exporting a ZIP. To apply external CSV changes, import them again through the interface.',
   'Nhập text, CSV, Excel và thêm từng thẻ thủ công đều dùng chung bảng so sánh thẻ trùng. Chọn Sửa trước khi nhập để sửa thuật ngữ, thêm hoặc xóa nghĩa, chọn từ loại riêng cho từng nghĩa, sửa cách đọc, ngôn ngữ đọc, ghi chú và ảnh. Sau đó chọn Tạo thẻ riêng, Ghi đè thẻ trùng hoặc Bổ sung vào thẻ trùng. Tạo thẻ riêng cần thuật ngữ không trùng. Ghi đè thay nội dung và đặt lại tiến độ. Bổ sung giữ nội dung và tiến độ cũ, chỉ thêm cặp nghĩa–từ loại chưa có và điền trường còn trống. Có thể sửa nhiều thẻ và chuyển trang mà không mất bản nháp; chỉ lưu sau khi bấm Xác nhận nhập.':
     'Text, CSV, Excel and manually added cards all use the same duplicate comparison dialog. Choose Edit before importing to edit the term, add or remove meanings, choose a word class for each meaning, and edit pronunciation, speech language, notes and image. Then choose Create a separate card, Overwrite duplicate or Merge into duplicate. A separate card needs a unique term. Overwrite replaces content and resets progress. Merge preserves existing content and progress, adds only new meaning and word-class pairs and fills empty fields. You can edit multiple cards and change pages without losing drafts; changes are saved only after Confirm import.',
 
@@ -114,8 +153,8 @@ const phrases: Record<string, string> = {
     'Pronunciation normally contains phonetic text. To preserve the speech language too, use JSON in the pronunciation cell, for example {"text":"/bʊk/","language":"en-GB"}. Exports save this information automatically.',
   'Trong học phần, chọn Xuất thẻ → CSV, Text hoặc Excel. Cả ba định dạng xuất cùng 5 trường; toàn bộ nghĩa–từ loại nằm chung trong definition; giữ hàng tiêu đề khi sửa rồi nhập lại. Ngôn ngữ đọc ví dụ en-US, vi-VN, zh-CN, ja-JP hoặc ko-KR.':
     'In a study set, choose Export cards → CSV, Text or Excel. All three export the same 5 fields, with all meaning and word-class pairs in definition. Keep the header row when editing and importing again. Speech language examples: en-US, vi-VN, zh-CN, ja-JP or ko-KR.',
-  'Tệp thẻ dùng để trao đổi nội dung. Muốn giữ cả tiến độ và dấu đã nhớ, hãy xuất bản sao lưu ZIP trong Cài đặt.':
-    'Card files exchange content. To preserve progress and remembered marks too, export a ZIP backup in Settings.',
+  'Tệp thẻ dùng để trao đổi nội dung. Muốn giữ cả tiến độ và dấu đã nhớ, hãy xuất bản sao lưu SQLite trong Cài đặt.':
+    'Card files exchange content. To preserve progress and remembered marks too, export a SQLite backup in Settings.',
   'Mỗi dòng gồm 5 trường: thuật ngữ, định nghĩa, cách đọc, ghi chú, ảnh minh họa. Chỉ hai trường đầu bắt buộc. Trong định nghĩa, dùng từ loại::nghĩa và dấu | để thêm nghĩa.':
     'Each row has 5 fields: term, definition, pronunciation, notes, image. Only the first two are required. In definition, use partOfSpeech::meaning and | to add meanings.',
 
@@ -149,8 +188,8 @@ const phrases: Record<string, string> = {
   'Xuất và nhập lại': 'Exporting and reimporting',
   'Trong học phần, chọn Xuất thẻ → CSV, Text hoặc Excel. Cả ba định dạng xuất cùng các cột nghĩa–từ loại riêng và ngôn ngữ đọc; giữ hàng tiêu đề khi sửa rồi nhập lại. Ngôn ngữ đọc ví dụ en-US, vi-VN, zh-CN, ja-JP hoặc ko-KR.':
     'In a study set, choose Export cards → CSV, Text or Excel. All three formats export separate meaning–word class columns and the speech language. Keep the header row when editing and reimporting. Example speech languages: en-US, vi-VN, zh-CN, ja-JP and ko-KR.',
-  'Tệp thẻ dùng để trao đổi nội dung. Muốn giữ cả ảnh, tiến độ và dấu đã nhớ, hãy xuất bản sao lưu ZIP trong Cài đặt.':
-    'Card files exchange vocabulary content. To keep images, progress and remembered marks, export a ZIP backup in Settings.',
+  'Tệp thẻ dùng để trao đổi nội dung. Muốn giữ cả ảnh, tiến độ và dấu đã nhớ, hãy xuất bản sao lưu SQLite trong Cài đặt.':
+    'Card files exchange vocabulary content. To keep images, progress and remembered marks, export a SQLite backup in Settings.',
   'Tương thích file cũ và từ trùng': 'Older files and duplicates',
   'File cũ có 2–6 trường hoặc cột definitions vẫn nhập được. JSON trong definitions giữ từng cặp meaning và partOfSpeech; nghĩa dạng chữ không có từ loại riêng sẽ dùng từ loại của nghĩa đầu tiên.':
     'Older files with 2–6 fields or a definitions column are still supported. JSON in definitions preserves meaning and partOfSpeech pairs. Plain-text additional meanings inherit the first meaning’s word class.',
@@ -328,17 +367,17 @@ const phrases: Record<string, string> = {
   'Đang học': 'Learning',
   'Thành thạo': 'Mastered',
   'SAO LƯU TRƯỚC KHI XÓA': 'BACK UP BEFORE DELETING',
-  'Bạn có muốn tải bản sao lưu ZIP trước khi xóa không?':
-    'Would you like to download a ZIP backup before deleting?',
-  'Sao lưu ZIP rồi xóa': 'Back up ZIP, then delete',
+  'Bạn có muốn tải bản sao lưu SQLite trước khi xóa không?':
+    'Would you like to download a SQLite backup before deleting?',
+  'Sao lưu database rồi xóa': 'Back up database, then delete',
   'Xóa không sao lưu': 'Delete without backup',
-  'Bản ZIP đã được gửi tới trình duyệt. Hãy kiểm tra file đã lưu xong trước khi tiếp tục xóa người dùng.':
-    'The ZIP download has been sent to your browser. Check that the file is saved before deleting the user.',
+  'Bản SQLite đã được gửi tới trình duyệt. Hãy kiểm tra file đã lưu xong trước khi tiếp tục xóa người dùng.':
+    'The SQLite download has been sent to your browser. Check that the file is saved before deleting the user.',
   'Bạn đã lưu bản sao lưu?': 'Have you saved the backup?',
   'Đã lưu, xóa người dùng': 'Saved, delete user',
   'Giữ người dùng': 'Keep user',
-  'Bản sao lưu ZIP không hợp lệ. Người dùng chưa bị xóa.':
-    'The ZIP backup is invalid. The user has not been deleted.',
+  'Bản sao lưu SQLite không hợp lệ. Người dùng chưa bị xóa.':
+    'The SQLite backup is invalid. The user has not been deleted.',
   'Chỉ chủ bài viết được sửa hoặc xóa bài.':
     'Only the owner can edit or delete this post.',
   'Xóa bài': 'Delete post',
@@ -746,8 +785,8 @@ const phrases: Record<string, string> = {
     'Click a preview button in Settings to allow audio playback.',
   'Không xuất được thư mục người dùng. Hãy thử lại.':
     'Unable to export the user folder. Please try again.',
-  'Dữ liệu chưa đồng bộ. Hãy kiểm tra kết nối trước khi xuất ZIP.':
-    'Your changes have not synced yet. Check the connection before exporting a ZIP.',
+  'Dữ liệu chưa đồng bộ. Hãy kiểm tra kết nối trước khi xuất database.':
+    'Your changes have not synced yet. Check the connection before exporting a database.',
   'Xung đột dữ liệu · thay đổi của bạn đang được giữ trên trình duyệt.':
     'Data conflict · your changes are kept in this browser.',
   'Không lưu được bộ nhớ trình duyệt. Hãy kiểm tra dung lượng lưu trữ.':
@@ -1120,6 +1159,16 @@ const phrases: Record<string, string> = {
 // Captured content is left untouched, including names, terms and answers.
 const patterns: [RegExp, (...parts: string[]) => string][] = [
   [
+    /^Thay toàn bộ dữ liệu hiện tại bằng (\d+) hồ sơ, (\d+) thẻ, (\d+) bài viết và (\d+) ảnh từ database đã chọn\? Ứng dụng sẽ tự lưu một database dự phòng trước khi thay đổi\.$/,
+    (profiles, cards, posts, images) =>
+      `Replace all current data with ${profiles} profiles, ${cards} cards, ${posts} posts and ${images} images from this database? A recovery database will be saved before making changes.`,
+  ],
+  [
+    /^Khôi phục hồ sơ “(.*)”, gồm (\d+) thẻ, tiến độ, lịch sử, cấu hình, ghi chú và bài viết của hồ sơ\? Dữ liệu của hồ sơ cùng ID sẽ được thay thế; hồ sơ khác được giữ lại\. Ứng dụng sẽ tự lưu một database dự phòng trước khi thay đổi\.$/s,
+    (name, cards) =>
+      `Restore profile “${name}” with ${cards} cards, progress, history, settings, notes and posts? The profile with this ID will be replaced; other profiles will be preserved. A recovery database will be saved before making changes.`,
+  ],
+  [
     /^Dòng (\d+): từ loại có nhưng thiếu nghĩa đi kèm\.$/,
     (line) =>
       `Row ${line}: a word class is present but its meaning is missing.`,
@@ -1210,9 +1259,9 @@ const patterns: [RegExp, (...parts: string[]) => string][] = [
       `CSV not imported: the term “${term}” is duplicated in this set or file.`,
   ],
   [
-    /^Ghi đè học phần và tiến độ của “(.*)” bằng thư mục đã chọn\? Xuất ZIP trong Cài đặt trước nếu muốn giữ bản hiện có\.$/s,
+    /^Ghi đè học phần và tiến độ của “(.*)” bằng thư mục đã chọn\? Sao lưu database trong Cài đặt trước nếu muốn giữ bản hiện có\.$/s,
     (name) =>
-      `Overwrite sets and progress for “${name}” with the selected folder? Export a ZIP in Settings first to keep a copy.`,
+      `Overwrite sets and progress for “${name}” with the selected folder? Back up the database in Settings first to keep a copy.`,
   ],
   [
     /^File (.*) không có thẻ hợp lệ\.$/s,

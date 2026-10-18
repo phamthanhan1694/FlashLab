@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { Window } from 'happy-dom';
+import { IDBFactory } from 'fake-indexeddb';
 import { zipSync, strToU8 } from 'fflate';
 
 async function waitFor(condition, label) {
@@ -23,6 +24,10 @@ test('production frontend: initialize, create deck/card, render all study modes 
     },
   });
   t.after(() => window.happyDOM.abort());
+  Object.defineProperty(window, 'indexedDB', {
+    value: new IDBFactory(),
+    configurable: true,
+  });
   const html = await readFile(
     new URL('../apps/frontend/dist/index.html', import.meta.url),
     'utf8',

@@ -2,8 +2,13 @@ import { pageButtons } from '../../ui/pagination';
 import { ico } from '../../ui/icons';
 import { createButton } from '../../ui/create-button';
 import { helpLink } from '../../ui/help';
-import { askProfileDeletion, downloadProfileBackup } from './backup';
+import {
+  askProfileDeletion,
+  downloadProfileBackup,
+  restoreDatabaseBackup,
+} from './backup';
 import { fetchRead } from '../../core/http';
+import { browserCache } from '../../core/cache';
 import {
   profileAvatar,
   avatarPickerMarkup,
@@ -160,7 +165,7 @@ export async function initializeProfiles(
           )
           .join('') ||
         '<p class="help-note">Không tìm thấy người dùng phù hợp.</p>'
-      }</div>${pages > 1 ? `<nav class="history-pagination" aria-label="Phân trang người dùng"><span>Trang ${page} / ${pages}</span><div>${pageButtons(page, pages, (number) => `data-profile-page="${number}"`)}</div></nav>` : ''}<section class="profile-actions-panel"><form novalidate id="profile-create-form"><label for="profile-name">Tên người dùng mới</label><div class="profile-create-row"><div class="form-field"><input id="profile-name" required maxlength="60" autocomplete="off" placeholder="Ví dụ: An, Bình…"></div>${createButton('Thêm người dùng', '', 'submit')}</div></form><div class="profile-import-section"><div><h3>Nhập thư mục người dùng</h3><p>Khôi phục bản sao lưu hoặc tạo người dùng từ thư mục CSV.</p></div><button type="button" class="btn outline" data-profile-folder>${ico('upload', 16)} Nhập thư mục</button></div></section><input type="file" data-profile-folder-input webkitdirectory multiple hidden>${helpLink('backup')}</section></div>${avatarPickerMarkup()}`;
+      }</div>${pages > 1 ? `<nav class="history-pagination" aria-label="Phân trang người dùng"><span>Trang ${page} / ${pages}</span><div>${pageButtons(page, pages, (number) => `data-profile-page="${number}"`)}</div></nav>` : ''}<section class="profile-actions-panel"><form novalidate id="profile-create-form"><label for="profile-name">Tên người dùng mới</label><div class="profile-create-row"><div class="form-field"><input id="profile-name" required maxlength="60" autocomplete="off" placeholder="Ví dụ: An, Bình…"></div>${createButton('Thêm người dùng', '', 'submit')}</div></form><div class="profile-import-section"><div><h3>Khôi phục database</h3><p>Chọn bản sao lưu SQLite của một hồ sơ hoặc toàn bộ dữ liệu.</p></div><button type="button" class="btn outline" data-profile-database>Chọn database</button></div><input type="file" data-profile-database-input accept=".sqlite,.db,application/vnd.sqlite3" hidden><div class="profile-import-section"><div><h3>Nhập thư mục người dùng</h3><p>Khôi phục bản sao lưu hoặc tạo người dùng từ thư mục CSV.</p></div><button type="button" class="btn outline" data-profile-folder>${ico('upload', 16)} Nhập thư mục</button></div></section><input type="file" data-profile-folder-input webkitdirectory multiple hidden>${helpLink('backup')}</section></div>${avatarPickerMarkup()}`;
       release = activateModal(
         root.querySelector<HTMLElement>('.modal')!,
         close,
@@ -357,7 +362,7 @@ export async function initializeProfiles(
                 await downloadProfileBackup(profile);
                 if (
                   !(await askConfirmation(
-                    'Bản ZIP đã được gửi tới trình duyệt. Hãy kiểm tra file đã lưu xong trước khi tiếp tục xóa người dùng.',
+                    'Bản SQLite đã được gửi tới trình duyệt. Hãy kiểm tra file đã lưu xong trước khi tiếp tục xóa người dùng.',
                     {
                       title: 'Bạn đã lưu bản sao lưu?',
                       confirmLabel: 'Đã lưu, xóa người dùng',
@@ -391,7 +396,7 @@ export async function initializeProfiles(
                   : `flashlab.html.v2.${profile.id}`,
               ]) {
                 try {
-                  localStorage.removeItem(key);
+                  await browserCache.remove(key);
                 } catch {
                   /* Deleted profiles cannot be reopened through the server. */
                 }
@@ -441,6 +446,34 @@ export async function initializeProfiles(
             }
           } else location.hash = hash;
         });
+      const databaseInput = root.querySelector<HTMLInputElement>(
+        '[data-profile-database-input]',
+      )!;
+      const databaseButton = root.querySelector<HTMLButtonElement>(
+        '[data-profile-database]',
+      )!;
+      databaseButton.addEventListener('click', () => databaseInput.click());
+      databaseInput.addEventListener('change', async () => {
+        const file = databaseInput.files?.[0];
+        databaseInput.value = '';
+        if (!file) return;
+        databaseButton.disabled = true;
+        try {
+          await restoreDatabaseBackup(file, async () => {
+            await Promise.all([...pendingAvatarWrites]);
+            return beforeSwitch();
+          });
+        } catch (error) {
+          notify(
+            error instanceof Error
+              ? error.message
+              : 'Không khôi phục được database.',
+            true,
+          );
+        } finally {
+          databaseButton.disabled = false;
+        }
+      });
       const folderInput = root.querySelector<HTMLInputElement>(
         '[data-profile-folder-input]',
       )!;
@@ -458,7 +491,7 @@ export async function initializeProfiles(
           if (
             existing &&
             !(await askConfirmation(
-              `Ghi đè học phần và tiến độ của “${existing.name}” bằng thư mục đã chọn? Xuất ZIP trong Cài đặt trước nếu muốn giữ bản hiện có.`,
+              `Ghi đè học phần và tiến độ của “${existing.name}” bằng thư mục đã chọn? Sao lưu database trong Cài đặt trước nếu muốn giữ bản hiện có.`,
               {
                 title: 'Ghi đè người dùng?',
                 confirmLabel: 'Ghi đè',

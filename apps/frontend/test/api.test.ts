@@ -3,6 +3,11 @@ import assert from 'node:assert/strict';
 import type { AppData } from '@flashlab/shared';
 import { StateSync } from '../src/core/api';
 import { parseDelimited } from '../src/core/csv';
+import { IDBFactory } from 'fake-indexeddb';
+import { browserCache } from '../src/core/cache';
+
+const cached = (key: string) =>
+  browserCache.read<{ data: AppData; pending: boolean }>(key);
 
 const data: AppData = { version: 2, decks: [], history: {}, sessions: [] };
 function setup(t: TestContext, initial?: object) {
@@ -32,11 +37,23 @@ function setup(t: TestContext, initial?: object) {
     globalThis,
     'localStorage',
   );
+  const originalIndexedDB = Object.getOwnPropertyDescriptor(
+    globalThis,
+    'indexedDB',
+  );
+  Object.defineProperty(globalThis, 'indexedDB', {
+    value: new IDBFactory(),
+    configurable: true,
+  });
   Object.defineProperty(globalThis, 'localStorage', {
     value: storage,
     configurable: true,
   });
-  t.after(() => {
+  t.after(async () => {
+    await browserCache.close();
+    if (originalIndexedDB)
+      Object.defineProperty(globalThis, 'indexedDB', originalIndexedDB);
+    else Reflect.deleteProperty(globalThis, 'indexedDB');
     if (originalStorage)
       Object.defineProperty(globalThis, 'localStorage', originalStorage);
     else Reflect.deleteProperty(globalThis, 'localStorage');
@@ -75,7 +92,8 @@ test('offline changes are cached and remain pending until successfully saved', a
   });
   assert.deepEqual(await sync.initialize(data), data);
   assert.equal(sync.hasPending, true);
-  assert.equal(JSON.parse(values.get('flashlab.server.v1')!).pending, true);
+  assert.equal((await cached('flashlab.server.v1'))!.pending, true);
+  assert.equal(values.has('flashlab.server.v1'), false);
   fetch.mock.mockImplementation(
     async () => new Response(JSON.stringify({ revision: 1, data })),
   );
@@ -171,14 +189,8 @@ test('profile caches and pending offline changes cannot leak into another profil
   });
   await a.initialize(aData);
   await b.initialize(data);
-  assert.deepEqual(
-    JSON.parse(values.get(`flashlab.server.v1.${idA}`)!).data,
-    aData,
-  );
-  assert.deepEqual(
-    JSON.parse(values.get(`flashlab.server.v1.${idB}`)!).data,
-    data,
-  );
+  assert.deepEqual((await cached(`flashlab.server.v1.${idA}`))!.data, aData);
+  assert.deepEqual((await cached(`flashlab.server.v1.${idB}`))!.data, data);
   assert.equal(values.has('flashlab.server.v1'), false);
   const requests: string[] = [];
   t.mock.method(
@@ -233,11 +245,15 @@ test('an avatar save with a lost response is acknowledged before switching profi
   await sync.flush();
   assert.equal(sync.hasPending, false);
   assert.equal(server.data.preferences?.avatar, 'fox');
-  assert.equal(JSON.parse(values.get('flashlab.server.v1')!).pending, false);
+  assert.equal((await cached('flashlab.server.v1'))!.pending, false);
 });
 
 test('switch waits for the latest avatar when another save is already in flight', async (t) => {
   const { sync } = setup(t);
+  let entered!: () => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
   let release!: () => void;
   const gate = new Promise<void>((resolve) => {
     release = resolve;
@@ -252,7 +268,10 @@ test('switch waits for the latest avatar when another save is already in flight'
         return new Response(JSON.stringify({ revision: 0, data }));
       const payload = JSON.parse(String(options.body));
       revisions.push(payload.revision);
-      if (revisions.length === 1) await gate;
+      if (revisions.length === 1) {
+        entered();
+        await gate;
+      }
       stored = payload.data;
       return new Response(
         JSON.stringify({ revision: payload.revision + 1, data: stored }),
@@ -262,6 +281,7 @@ test('switch waits for the latest avatar when another save is already in flight'
   await sync.initialize(data);
   sync.schedule(data);
   const first = sync.flush();
+  await started;
   sync.schedule({
     ...data,
     preferences: {
@@ -408,5 +428,44 @@ test('failed conflict recovery keeps the pending local copy intact', async (t) =
   await assert.rejects(sync.useServer(), /Không đọc/);
   assert.equal(sync.hasConflict, true);
   assert.equal(sync.hasPending, true);
-  assert.deepEqual(JSON.parse(values.get('flashlab.server.v1')!).data, data);
+  assert.deepEqual((await cached('flashlab.server.v1'))!.data, data);
+});
+
+test('rapid saves coalesce queued IndexedDB snapshots and persist the latest state across a reload', async (t) => {
+  const { sync, values } = setup(t);
+  t.mock.method(
+    globalThis,
+    'fetch',
+    async () => new Response(JSON.stringify({ revision: 1, data })),
+  );
+  await sync.initialize(data);
+  const write = t.mock.method(browserCache, 'write');
+  for (let index = 1; index <= 20; index++)
+    sync.schedule({ ...data, history: { '2026-10-18': index } });
+  const saved = { ...data, history: { '2026-10-18': 20 } };
+  t.mock.method(
+    globalThis,
+    'fetch',
+    async (_url: unknown, options?: RequestInit) => {
+      if (options?.method === 'PUT') {
+        assert.deepEqual(JSON.parse(String(options.body)).data, saved);
+        return new Response(JSON.stringify({ revision: 2, data: saved }));
+      }
+      return new Response(JSON.stringify({ revision: 2, data: saved }));
+    },
+  );
+  await sync.flush();
+  assert.equal(
+    write.mock.callCount(),
+    2,
+    'only the latest pending state and its server acknowledgement are cached',
+  );
+  assert.deepEqual((await cached('flashlab.server.v1'))!.data, saved);
+  assert.equal(
+    values.size,
+    0,
+    'snapshots are never written back to localStorage',
+  );
+  const reopened = new StateSync(() => {});
+  assert.deepEqual(await reopened.initialize(data), saved);
 });

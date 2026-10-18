@@ -94,6 +94,7 @@ import {
   type StudyMode,
 } from '@flashlab/shared';
 import { StateSync } from './core/api';
+import { browserCache } from './core/cache';
 import type { Item, Study, UIState } from './types/study-types';
 import './ui/styles.css';
 
@@ -119,7 +120,7 @@ async function main() {
   installFormFeedback();
   let sync: StateSync;
   let exitGuard: ReturnType<typeof installStudyExitGuard> | undefined;
-  const profile = await initializeProfiles(async (finalize = true) => {
+  async function prepareProfileSwitch(finalize = true) {
     if (finalize) {
       if (exitGuard && !(await exitGuard.confirm())) return false;
       cancelAdvance();
@@ -128,7 +129,8 @@ async function main() {
     await sync.flush();
     if (sync.hasPending) throw new Error(sync.pendingMessage);
     if (finalize) ui.study = null;
-  });
+  }
+  const profile = await initializeProfiles(prepareProfileSwitch);
   sync = new StateSync(reportSync, profile.id);
   let advanceTimer: ReturnType<typeof setInterval> | undefined;
   function cancelAdvance() {
@@ -183,23 +185,21 @@ async function main() {
       throw new Error('Dữ liệu đã lưu không đúng định dạng FlashLab.');
     return parsed.data;
   }
-  let storageAvailable = true;
-  function load() {
+  async function load() {
     try {
-      const raw = localStorage.getItem(STORE);
+      const raw = await browserCache.read(STORE);
       return raw
-        ? validateBackup(JSON.parse(raw))
+        ? validateBackup(raw)
         : profile.id === 'default'
           ? samples()
           : { version: 2 as const, decks: [], history: {}, sessions: [] };
     } catch (e) {
-      if (e instanceof DOMException) storageAvailable = false;
       return profile.id === 'default'
         ? samples()
         : { version: 2 as const, decks: [], history: {}, sessions: [] };
     }
   }
-  let data: AppData = await sync.initialize(load());
+  let data: AppData = await sync.initialize(await load());
   let ui: UIState = {
     page: 'home',
     deckId: null,
@@ -218,7 +218,6 @@ async function main() {
   initializeActivityTooltip();
 
   let matchTimer: ReturnType<typeof setInterval> | null = null;
-  let persistFailureShown = false;
   if (!data.preferences) {
     let legacy: unknown = runtimeConfig.defaults;
     if (profile.id === 'default') {
@@ -272,17 +271,20 @@ async function main() {
     data.preferences!.tileSize = size;
     save();
   });
-  initializeSettings(profile, async () => {
-    await sync.flush();
-    if (sync.hasPending)
-      throw new Error(
-        'Dữ liệu chưa đồng bộ. Hãy kiểm tra kết nối trước khi xuất ZIP.',
-      );
-  });
+  initializeSettings(
+    profile,
+    async () => {
+      await sync.flush();
+      if (sync.hasPending)
+        throw new Error(
+          'Dữ liệu chưa đồng bộ. Hãy kiểm tra kết nối trước khi xuất database.',
+        );
+    },
+    () => prepareProfileSwitch(),
+  );
 
   sync.onReconcile = (merged) => {
     data = merged;
-    localStorage.setItem(STORE, JSON.stringify(data));
     if (!['blog', 'notes'].includes(ui.page)) render();
   };
   const resolveSync = document.createElement('button');
@@ -312,8 +314,8 @@ async function main() {
         return;
       const backup = JSON.stringify(data);
       const backupKey = `flashlab.conflict-backup.${profile.id}.${Date.now()}`;
-      localStorage.setItem(backupKey, backup);
-      if (localStorage.getItem(backupKey) !== backup)
+      await browserCache.write(backupKey, data);
+      if (!(await browserCache.read(backupKey)))
         throw new Error('Chưa sao lưu được dữ liệu.');
       const url = URL.createObjectURL(
         new Blob([backup], { type: 'application/json' }),
@@ -324,7 +326,6 @@ async function main() {
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       data = await sync.useServer();
-      localStorage.setItem(STORE, JSON.stringify(data));
       location.reload();
     } catch (error) {
       toast(errorMessage(error), true);
@@ -334,19 +335,6 @@ async function main() {
   });
 
   function save() {
-    try {
-      localStorage.setItem(STORE, JSON.stringify(data));
-      storageAvailable = true;
-    } catch (e) {
-      storageAvailable = false;
-      if (!persistFailureShown) {
-        persistFailureShown = true;
-        toast(
-          'Không thể lưu tự động. Hãy xuất thư mục người dùng để sao lưu.',
-          true,
-        );
-      }
-    }
     sync.schedule(data);
     updateNav();
   }
@@ -770,7 +758,6 @@ async function main() {
   function renderHome() {
     const count = totals().due;
     return `<div class="welcome page-heading"><div><h1>Học tốt hơn mỗi ngày <span class="sparkle">✦</span></h1><p class="lead">Sẵn sàng khám phá kiến thức mới? Bắt đầu từ một thẻ nhỏ nhé.</p></div>${createButton('Tạo học phần', 'data-action="create-deck"')}</div>
- ${!storageAvailable ? '<div class="notice">Trình duyệt đang chặn lưu dữ liệu. Hãy xuất thư mục người dùng thường xuyên.</div>' : ''}
  ${statsCards()}
  ${renderStudyPulse()}
  ${activityHeatmap(data.history, activityYear, profile.created)}
@@ -818,7 +805,7 @@ async function main() {
     return `<div class="heading-row page-heading"><div><h1>Thư viện học phần</h1><p class="lead">Tổ chức kiến thức theo chủ đề, học theo tốc độ của bạn.</p></div><div class="header-actions">${createButton('Tạo học phần', 'data-action="create-deck"')}</div></div>
  <div class="library-tools"><div class="search-box" style="width:min(330px,100%)">${ico('search', 17)}<input id="library-search" placeholder="Tìm học phần hoặc từ vựng..." value="${esc(ui.filter)}" autocomplete="off"></div><span style="color:var(--sub);font-size:14px">${data.decks.length} học phần</span></div>
  <div id="vocabulary-results">${vocabularySearchResults(ui.filter)}</div><div id="library-result">${libraryGrid(data.decks.filter((d) => deckMatches(d, ui.filter)))}</div>
- <div class="mini-panel" style="margin-top:27px;display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap"><div><h3>🔐 Dữ liệu thuộc về bạn</h3><p>Không có tài khoản, không gửi thẻ lên Internet. Xuất thư mục ZIP trong Cài đặt hoặc nhập thư mục qua menu người dùng.</p></div></div>`;
+ <div class="mini-panel" style="margin-top:27px;display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap"><div><h3>🔐 Dữ liệu thuộc về bạn</h3><p>Không có tài khoản, không gửi thẻ lên Internet. Sao lưu database trong Cài đặt hoặc khôi phục database qua menu người dùng.</p></div></div>`;
   }
   function renderClasses() {
     const groups = data.classes ?? [];

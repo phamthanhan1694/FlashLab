@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { Window } from 'happy-dom';
+import { IDBFactory } from 'fake-indexeddb';
 
 async function waitFor(check, label) {
   for (let i = 0; i < 500; i++) {
@@ -60,6 +61,7 @@ test('profiles UI: create, switch, separate preferences, confirm deletion and re
     ],
   ]);
   const storage = new Map();
+  const indexedDB = new IDBFactory();
   let exports = 0;
   let exportFailure = false;
   const operations = [];
@@ -74,6 +76,10 @@ test('profiles UI: create, switch, separate preferences, confirm deletion and re
       },
     });
     windows.push(window);
+    Object.defineProperty(window, 'indexedDB', {
+      value: indexedDB,
+      configurable: true,
+    });
     window.document.write(html.replace(/<script[^>]*>[\s\S]*?<\/script>/g, ''));
     for (const [key, value] of storage) window.localStorage.setItem(key, value);
     window.structuredClone = structuredClone;
@@ -156,12 +162,12 @@ test('profiles UI: create, switch, separate preferences, confirm deletion and re
       if (!snapshots.has(id))
         return response({ error: 'Missing profile' }, 404);
       const snapshot = snapshots.get(id);
-      if (path.endsWith('/export')) {
+      if (path.endsWith('/database')) {
         exports++;
         operations.push('export:' + id);
         if (exportFailure) return response({ error: 'Export failed' }, 500);
-        return new Response(new Uint8Array([80, 75, 3, 4]), {
-          headers: { 'Content-Type': 'application/zip' },
+        return new Response(new TextEncoder().encode('SQLite format 3\0'), {
+          headers: { 'Content-Type': 'application/vnd.sqlite3' },
         });
       }
       if (method === 'POST' && path.endsWith('/import')) {
@@ -350,9 +356,9 @@ test('profiles UI: create, switch, separate preferences, confirm deletion and re
   );
   app.click('[data-avatar-close]');
   assert.equal(app.document.querySelector('.avatar-picker').hidden, true);
-  let zipBlob;
+  let databaseBlob;
   app.window.URL.createObjectURL = (blob) => {
-    zipBlob = blob;
+    databaseBlob = blob;
     return 'blob:profile-test';
   };
   app.window.URL.revokeObjectURL = () => {};
@@ -361,14 +367,14 @@ test('profiles UI: create, switch, separate preferences, confirm deletion and re
   app.click('[data-profile-close]');
   app.click('#settings > summary');
   app.click('#settings-export');
-  await waitFor(() => zipBlob, 'ZIP download');
+  await waitFor(() => databaseBlob, 'SQLite download');
   assert.equal(exports, 1);
-  assert.equal(zipBlob.type, 'application/zip');
+  assert.equal(databaseBlob.type, 'application/vnd.sqlite3');
   app.click('#settings-close');
   app.click('#profile-button');
   await waitFor(
     () => app.document.querySelector('#profile-create-form'),
-    'profile manager after ZIP export',
+    'profile manager after SQLite export',
   );
   const folderInput = app.document.querySelector('[data-profile-folder-input]');
   const folderFile = (name, value) => {
@@ -546,7 +552,7 @@ test('profiles UI: create, switch, separate preferences, confirm deletion and re
     'backup saved confirmation',
   );
   assert.equal(profiles.length, 2, 'backup download alone does not delete');
-  assert.ok(downloads.includes(`FlashLab-${newId}.zip`));
+  assert.ok(downloads.includes(`FlashLab-${newId}.sqlite`));
   app.click('[data-confirm="cancel"]');
   await waitFor(
     () =>
@@ -575,6 +581,21 @@ test('profiles UI: create, switch, separate preferences, confirm deletion and re
     app.window.localStorage.getItem(`flashlab.server.v1.${newId}`),
     null,
   );
+  const cacheDB = await new Promise((resolve, reject) => {
+    const request = indexedDB.open('flashlab', 1);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  const deletedCache = await new Promise((resolve, reject) => {
+    const request = cacheDB
+      .transaction('cache', 'readonly')
+      .objectStore('cache')
+      .get(`flashlab.server.v1.${newId}`);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  cacheDB.close();
+  assert.equal(deletedCache, undefined);
   assert.equal(app.window.localStorage.getItem('flashlab.profile'), 'default');
   assert.equal(snapshots.get('default').data.decks[0].title, 'Học phần cũ');
   app.capture();

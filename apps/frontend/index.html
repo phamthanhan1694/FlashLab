@@ -191,8 +191,28 @@
                   class="btn outline settings-export"
                   id="settings-export"
                 >
-                  <span data-icon="download"></span> Xuất thư mục ZIP
+                  <span data-icon="download"></span> Sao lưu hồ sơ (.sqlite)
                 </button>
+                <button
+                  type="button"
+                  class="btn outline settings-export"
+                  id="settings-export-all"
+                >
+                  Sao lưu toàn bộ (.sqlite)
+                </button>
+                <button
+                  type="button"
+                  class="btn outline settings-export"
+                  id="settings-import"
+                >
+                  Khôi phục từ database
+                </button>
+                <input
+                  type="file"
+                  id="settings-import-file"
+                  accept=".sqlite,.db,application/vnd.sqlite3"
+                  hidden
+                />
                 <p
                   id="settings-export-status"
                   class="help-note"

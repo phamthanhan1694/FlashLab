@@ -1,4 +1,5 @@
 import { fetchRead } from './http';
+import { browserCache } from './cache';
 import {
   snapshotSchema,
   stateSchema,
@@ -48,6 +49,8 @@ export class StateSync {
   private pulling = false;
   private readonly cacheKey: string;
   private readonly endpoint: string;
+  private cacheWrite: Promise<void> = Promise.resolve();
+  private cacheSequence = 0;
   constructor(
     private status: (message: string, error?: boolean) => void,
     profileId = 'default',
@@ -63,29 +66,31 @@ export class StateSync {
   }
 
   private cache(data: AppData, pending: boolean) {
-    try {
-      localStorage.setItem(
-        this.cacheKey,
-        JSON.stringify({
-          revision: this.revision,
-          data,
-          pending,
-          base: this.confirmed,
-        }),
-      );
-    } catch {
-      this.status(
-        'Không lưu được bộ nhớ trình duyệt. Hãy kiểm tra dung lượng lưu trữ.',
-        true,
-      );
-    }
+    const value = {
+      revision: this.revision,
+      data,
+      pending,
+      base: this.confirmed,
+    };
+    // Serialize commits so a slow old write cannot replace a newer pending state.
+    const sequence = ++this.cacheSequence;
+    this.cacheWrite = this.cacheWrite
+      .then(async () => {
+        if (sequence === this.cacheSequence)
+          await browserCache.write(this.cacheKey, value);
+      })
+      .catch(() => {
+        this.status(
+          'Không lưu được bộ nhớ trình duyệt. Hãy kiểm tra dung lượng lưu trữ.',
+          true,
+        );
+      });
+    return this.cacheWrite;
   }
   async initialize(fallback: AppData): Promise<AppData> {
     let cached: Cache | undefined;
     try {
-      const raw: unknown = JSON.parse(
-        localStorage.getItem(this.cacheKey) ?? 'null',
-      );
+      const raw: unknown = await browserCache.read(this.cacheKey);
       const snapshot = snapshotSchema.safeParse(raw);
       if (snapshot.success && snapshot.data.data) {
         cached = {
@@ -138,15 +143,16 @@ export class StateSync {
         remote.data === null
       ) {
         this.schedule(local);
+        await this.cacheWrite;
         return local;
       }
-      this.cache(remote.data, false);
+      await this.cache(remote.data, false);
       this.status('Đã đồng bộ');
       return remote.data;
     } catch {
       this.pending = local;
       this.status('Chưa kết nối máy chủ · lưu tạm trên trình duyệt', true);
-      this.cache(local, true);
+      await this.cache(local, true);
       return local;
     }
   }
@@ -163,7 +169,7 @@ export class StateSync {
     }
   }
   schedule(data: AppData) {
-    this.pending = stateSchema.parse(structuredClone(data));
+    this.pending = stateSchema.parse(data);
     this.cache(this.pending, true);
     if (this.conflict) return;
     this.status('Đang lưu…');
@@ -174,6 +180,7 @@ export class StateSync {
   }
   async flush(): Promise<void> {
     clearTimeout(this.timer);
+    await this.cacheWrite;
     if (this.activeSave) {
       await this.activeSave;
       // A change can arrive just as the preceding request finishes.
@@ -236,7 +243,7 @@ export class StateSync {
           this.revision = remote.revision;
           current = merged;
           this.pending = merged;
-          this.cache(merged, true);
+          await this.cache(merged, true);
           this.onReconcile?.(structuredClone(merged));
           response = await write();
         }
@@ -272,7 +279,7 @@ export class StateSync {
       this.sentStates = [];
       this.revision = next.revision;
       if (this.pending === current) this.pending = null;
-      this.cache(this.pending ?? current, this.pending !== null);
+      await this.cache(this.pending ?? current, this.pending !== null);
       this.status(this.pending ? 'Đang lưu…' : 'Đã đồng bộ');
     } catch (error) {
       this.lastFailure =
@@ -303,7 +310,7 @@ export class StateSync {
       this.confirmed = structuredClone(remote.data);
       this.sentStates = [];
       this.lastFailure = '';
-      this.cache(remote.data, false);
+      await this.cache(remote.data, false);
       this.status('Đã đồng bộ');
       return remote.data;
     } finally {
