@@ -14,6 +14,12 @@ import {
 } from '@flashlab/shared';
 import { ConflictError } from '../storage/store.js';
 import { Profiles } from '../storage/profiles.js';
+import {
+  DatabaseBackups,
+  BackupError,
+  BACKUP_TYPE,
+  MAX_BACKUP_BYTES,
+} from '../storage/backups.js';
 
 export function buildApp(options: {
   dataFile: string;
@@ -27,7 +33,8 @@ export function buildApp(options: {
     bodyLimit: 20_000_000,
   });
   const profiles = new Profiles(options.dataFile, options.storageDir);
-  const blog = new BlogStore(join(profiles.root, 'blog'));
+  const blog = new BlogStore(join(profiles.root, 'blog'), profiles.database);
+  app.addHook('onClose', async () => profiles.close());
   async function blogOwner(header: unknown) {
     const id = profileIdSchema.safeParse(header);
     if (!id.success)
@@ -38,7 +45,74 @@ export function buildApp(options: {
     if (!owner) throw new BlogAccessError('Người dùng không còn tồn tại.', 401);
     return owner;
   }
-  const blogImages = new BlogImages(join(profiles.root, 'blog', 'images'));
+  const blogImages = new BlogImages(
+    join(profiles.root, 'blog', 'images'),
+    profiles.database,
+  );
+  const backups = new DatabaseBackups(profiles, blog, blogImages);
+  app.addHook('onReady', async () => blogImages.initialize());
+  app.addContentTypeParser(
+    BACKUP_TYPE,
+    { parseAs: 'buffer', bodyLimit: MAX_BACKUP_BYTES },
+    (_request, body, done) => done(null, body),
+  );
+  app.get('/api/backups/database', async (_request, reply) =>
+    reply
+      .type(BACKUP_TYPE)
+      .header(
+        'Content-Disposition',
+        'attachment; filename="FlashLab-all.sqlite"',
+      )
+      .send(await backups.export()),
+  );
+  app.get<{ Params: { id: string } }>(
+    '/api/profiles/:id/database',
+    async (request, reply) => {
+      const id = profileIdSchema.parse(request.params.id);
+      return reply
+        .type(BACKUP_TYPE)
+        .header(
+          'Content-Disposition',
+          `attachment; filename="FlashLab-${id}.sqlite"`,
+        )
+        .send(await backups.export(id));
+    },
+  );
+  app.post(
+    '/api/backups/inspect',
+    { bodyLimit: MAX_BACKUP_BYTES },
+    async (request) => {
+      if (!Buffer.isBuffer(request.body))
+        throw new BackupError('Cần chọn một tệp database SQLite.');
+      return backups.inspect(request.body);
+    },
+  );
+  app.post(
+    '/api/backups/restore',
+    { bodyLimit: MAX_BACKUP_BYTES },
+    async (request, reply) => {
+      if (
+        !Buffer.isBuffer(request.body) ||
+        request.headers['x-flashlab-confirm'] !== 'restore'
+      )
+        throw new BackupError('Cần xác nhận trước khi khôi phục database.');
+      const revision = request.headers['x-flashlab-revision'];
+      const hash = request.headers['x-flashlab-backup-hash'];
+      if (
+        typeof revision !== 'string' ||
+        !/^\d+$/.test(revision) ||
+        typeof hash !== 'string'
+      )
+        throw new BackupError('Thiếu thông tin kiểm tra database.');
+      try {
+        return await backups.restore(request.body, Number(revision), hash);
+      } catch (error) {
+        if (error instanceof ConflictError)
+          return reply.code(409).send({ error: error.message });
+        throw error;
+      }
+    },
+  );
   app.post(
     '/api/blog-images',
     { bodyLimit: 3_000_000 },
@@ -145,7 +219,11 @@ export function buildApp(options: {
         .send(archive);
     },
   );
-  app.get('/api/storage', async () => ({ directory: profiles.root }));
+  app.get('/api/storage', async () => ({
+    directory: profiles.root,
+    engine: 'sqlite',
+    database: profiles.database.file,
+  }));
   app.post<{ Params: { id: string } }>(
     '/api/profiles/:id/import',
     async (request, reply) => {

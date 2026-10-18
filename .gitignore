@@ -18,3 +18,8 @@ src-tauri/target/
 src-tauri/resources/
 src-tauri/binaries/
 src-tauri/gen/
+
+# Local SQLite databases and their journal files
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

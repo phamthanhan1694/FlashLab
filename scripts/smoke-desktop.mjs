@@ -7,6 +7,7 @@ import { mkdtemp, readFile, writeFile, rm, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DatabaseSync } from 'node:sqlite';
 
 const resources = fileURLToPath(
   new URL('../src-tauri/resources/', import.meta.url),
@@ -127,10 +128,71 @@ test('bundled desktop backend serves assets, saves private profiles, skips occup
     },
   );
   assert.equal(saved.status, 200, await saved.text());
-  await access(join(directory, 'profiles'));
+  const uploaded = await fetch(`${running.base}/api/blog-images`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-flashlab-profile': profile.id,
+    },
+    body: JSON.stringify({ data: 'data:image/png;base64,iVBORw0KGgo=' }),
+  });
+  assert.equal(uploaded.status, 201);
+  const image = await uploaded.json();
+  const post = await fetch(`${running.base}/api/blog`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-flashlab-profile': profile.id,
+    },
+    body: JSON.stringify({
+      title: 'Desktop image backup',
+      markdown: `![image](${image.url})`,
+    }),
+  });
+  assert.equal(post.status, 201);
+  const backup = await fetch(`${running.base}/api/backups/database`);
+  assert.equal(backup.status, 200);
+  const backupBytes = Buffer.from(await backup.arrayBuffer());
+  assert.equal(backupBytes.subarray(0, 16).toString(), 'SQLite format 3\0');
+  const inspected = await fetch(`${running.base}/api/backups/inspect`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/vnd.sqlite3' },
+    body: backupBytes,
+  });
+  assert.equal(inspected.status, 200);
+  const manifest = await inspected.json();
+  assert.equal(manifest.profiles.length, 2);
+  assert.equal(manifest.cards, 1);
+  assert.equal(manifest.articles, 1);
+  assert.equal(manifest.images, 1);
+  const restoredBackup = await fetch(`${running.base}/api/backups/restore`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/vnd.sqlite3',
+      'x-flashlab-confirm': 'restore',
+      'x-flashlab-revision': String(manifest.expectedRevision),
+      'x-flashlab-backup-hash': manifest.hash,
+    },
+    body: backupBytes,
+  });
+  assert.equal(restoredBackup.status, 200, await restoredBackup.text());
+  await access(join(directory, 'profiles', 'flashlab.sqlite'));
+  const database = new DatabaseSync(
+    join(directory, 'profiles', 'flashlab.sqlite'),
+    { readOnly: true },
+  );
+  assert.equal(
+    database.prepare('SELECT count(*) count FROM profiles').get().count,
+    2,
+  );
+  database.close();
   await stop(running.child);
   running = await launch(directory);
   const profiles = await (await fetch(`${running.base}/api/profiles`)).json();
+  assert.deepEqual(
+    Buffer.from(await (await fetch(running.base + image.url)).arrayBuffer()),
+    Buffer.from('iVBORw0KGgo=', 'base64'),
+  );
   assert.ok(
     profiles.some(
       (item) => item.id === profile.id && item.name === 'Desktop test',

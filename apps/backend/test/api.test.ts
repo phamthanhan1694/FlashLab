@@ -4,7 +4,41 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type AppData, stateSchema, reviewCard } from '@flashlab/shared';
-import { buildApp } from '../src/http/app.js';
+import { buildApp as createApp } from '../src/http/app.js';
+import { DatabaseSync } from 'node:sqlite';
+
+const instances = new Map<string, ReturnType<typeof createApp>[]>();
+function buildApp(options: Parameters<typeof createApp>[0]) {
+  const app = createApp(options);
+  instances.set(options.dataFile, [
+    ...(instances.get(options.dataFile) ?? []),
+    app,
+  ]);
+  return app;
+}
+function queryStorage(root: string, sql: string, id: string) {
+  const db = new DatabaseSync(join(root, 'flashlab.sqlite'), {
+    readOnly: true,
+  });
+  try {
+    return db.prepare(sql).get(id);
+  } finally {
+    db.close();
+  }
+}
+function storedState(root: string, id: string) {
+  const row = queryStorage(
+    root,
+    'SELECT profile_id, revision, data FROM profile_states WHERE profile_id = ?',
+    id,
+  );
+  assert.ok(row);
+  return {
+    userId: row.profile_id,
+    revision: row.revision,
+    data: row.data === null ? null : JSON.parse(String(row.data)),
+  };
+}
 
 const state: AppData = {
   version: 2,
@@ -39,7 +73,9 @@ async function fixture(t: TestContext) {
   const dataFile = join(directory, 'state.json');
   const app = buildApp({ dataFile });
   t.after(async () => {
-    await app.close();
+    for (const instance of instances.get(dataFile) ?? [])
+      await instance.close();
+    instances.delete(dataFile);
     await rm(directory, { recursive: true, force: true });
   });
   return { app, dataFile };
@@ -471,7 +507,7 @@ test('concurrent creation cannot introduce duplicate profiles; deletion cannot r
   assert.equal((await app.inject('/api/profiles')).json().length, 1);
 });
 
-test('configured storage migrates legacy users without deleting originals and writes one folder per ID', async (t) => {
+test('configured SQLite storage migrates legacy users without deleting originals', async (t) => {
   const { dataFile } = await fixture(t);
   const { dirname } = await import('node:path');
   const { mkdir } = await import('node:fs/promises');
@@ -495,21 +531,15 @@ test('configured storage migrates legacy users without deleting originals and wr
   t.after(() => app.close());
   assert.equal((await app.inject('/api/profiles')).json().length, 2);
   assert.equal((await app.inject('/api/storage')).json().directory, storageDir);
-  const disk = JSON.parse(
-    await readFile(join(storageDir, 'default', 'state.json'), 'utf8'),
-  );
+  const disk = storedState(storageDir, 'default');
   assert.equal(disk.userId, 'default');
   assert.deepEqual(disk.data, state);
   assert.equal(disk.revision, 4);
   assert.equal(
-    JSON.parse(await readFile(join(storageDir, id, 'user.json'), 'utf8')).id,
+    queryStorage(storageDir, 'SELECT id FROM profiles WHERE id = ?', id)?.id,
     id,
   );
-  assert.equal(
-    JSON.parse(await readFile(join(storageDir, id, 'state.json'), 'utf8'))
-      .revision,
-    3,
-  );
+  assert.equal(storedState(storageDir, id).revision, 3);
   assert.deepEqual(JSON.parse(await readFile(dataFile, 'utf8')), legacy);
   const created = await app.inject({
     method: 'POST',
@@ -519,11 +549,7 @@ test('configured storage migrates legacy users without deleting originals and wr
   assert.equal(created.statusCode, 201);
   const newId = created.json().id;
   assert.notEqual(newId, id);
-  assert.equal(
-    JSON.parse(await readFile(join(storageDir, newId, 'state.json'), 'utf8'))
-      .userId,
-    newId,
-  );
+  assert.equal(storedState(storageDir, newId).userId, newId);
   const restarted = buildApp({ dataFile, storageDir });
   t.after(() => restarted.close());
   assert.deepEqual((await restarted.inject('/api/state')).json(), legacy);
@@ -542,10 +568,7 @@ test('disk restore requires confirmation, checks IDs/revisions and preserves oth
   ).json();
   const endpoint = `/api/profiles/${created.id}/import`;
   const backup = { ...state, userId: created.id, userName: 'An' };
-  const initial = await readFile(
-    join(storageDir, created.id, 'state.json'),
-    'utf8',
-  );
+  const initial = storedState(storageDir, created.id);
   for (const confirmed of [false, undefined]) {
     assert.equal(
       (
@@ -572,10 +595,7 @@ test('disk restore requires confirmation, checks IDs/revisions and preserves oth
     ).statusCode,
     400,
   );
-  assert.equal(
-    await readFile(join(storageDir, created.id, 'state.json'), 'utf8'),
-    initial,
-  );
+  assert.deepEqual(storedState(storageDir, created.id), initial);
   const beforeDefault = (await app.inject('/api/state')).json();
   const saved = await app.inject({
     method: 'POST',
@@ -583,9 +603,7 @@ test('disk restore requires confirmation, checks IDs/revisions and preserves oth
     payload: { confirmed: true, revision: 1, backup },
   });
   assert.equal(saved.statusCode, 200);
-  const disk = JSON.parse(
-    await readFile(join(storageDir, created.id, 'state.json'), 'utf8'),
-  );
+  const disk = storedState(storageDir, created.id);
   assert.equal(disk.userId, created.id);
   assert.deepEqual(disk.data, state);
   assert.equal(disk.revision, 2);
@@ -613,7 +631,8 @@ test('disk restore requires confirmation, checks IDs/revisions and preserves oth
   assert.equal(restored.statusCode, 200);
   assert.equal(restored.json().profile.id, id);
   assert.equal(
-    JSON.parse(await readFile(join(storageDir, id, 'user.json'), 'utf8')).name,
+    queryStorage(storageDir, 'SELECT name FROM profiles WHERE id = ?', id)
+      ?.name,
     'Bình',
   );
   assert.equal(
@@ -652,6 +671,14 @@ test('disk restore requires confirmation, checks IDs/revisions and preserves oth
   await assert.rejects(readFile(join(storageDir, id, 'state.json')), {
     code: 'ENOENT',
   });
+  assert.equal(
+    queryStorage(
+      storageDir,
+      'SELECT profile_id FROM profile_states WHERE profile_id = ?',
+      id,
+    ),
+    undefined,
+  );
 });
 
 test('moving default storage to another disk copies current progress instead of stale legacy data', async (t) => {
@@ -680,12 +707,7 @@ test('moving default storage to another disk copies current progress instead of 
     data: state,
   });
   assert.equal(
-    JSON.parse(
-      await readFile(
-        join(dirname(dataFile), 'storage', 'default', 'state.json'),
-        'utf8',
-      ),
-    ).revision,
+    storedState(join(dirname(dataFile), 'storage'), 'default').revision,
     2,
   );
 });
@@ -714,11 +736,9 @@ test('UUID case cannot create duplicate IDs or distinct user folders', async (t)
   assert.equal((await app.inject('/api/profiles')).json().length, 2);
 });
 
-test('per-user CSV materials escape text, track edits/deletion/restore and regenerate after restart', async (t) => {
+test('CSV exports reflect SQLite edits, deletion and restores without writing mirrors on each save', async (t) => {
+  const { unzipSync, strFromU8 } = await import('fflate');
   const { app, dataFile } = await fixture(t);
-  const { dirname } = await import('node:path');
-  const root = join(dirname(dataFile), 'storage');
-  const materials = join(root, 'default', 'materials');
   const data = structuredClone(state);
   data.decks[0].id = '../../outside';
   data.decks[0].cards[0].front = 'Thuật ngữ, "trích dẫn"';
@@ -729,37 +749,38 @@ test('per-user CSV materials escape text, track edits/deletion/restore and regen
       url: '/api/state',
       payload: { revision, data: value },
     });
+  const archive = async (source = app) => {
+    const response = await source.inject('/api/profiles/default/export');
+    assert.equal(response.statusCode, 200);
+    return unzipSync(response.rawPayload);
+  };
   assert.equal((await save(0, data)).statusCode, 200);
-  const index = JSON.parse(
-    await readFile(join(materials, 'index.json'), 'utf8'),
-  );
+  let files = await archive();
+  const index = JSON.parse(strFromU8(files['default/materials/index.json']));
   assert.equal(index.userId, 'default');
-  assert.equal(index.revision, 1);
   assert.equal(index.decks[0].title, 'TypeScript');
-  assert.match(index.decks[0].file, /^deck-[a-f0-9]{64}\.csv$/);
-  const csvFile = join(materials, index.decks[0].file);
-  assert.equal(
-    await readFile(csvFile, 'utf8'),
-    '\uFEFFfront,definition,pronunciation,notes,image\r\n"Thuật ngữ, ""trích dẫn""","Dòng một\nDòng hai","","",""\r\n',
-  );
-  const other = (
-    await app.inject({
-      method: 'POST',
-      url: '/api/profiles',
-      payload: { name: 'CSV user' },
-    })
-  ).json();
-  const otherMaterials = join(root, other.id, 'materials');
+  assert.equal(index.decks[0].file, 'deck-1.csv');
   assert.deepEqual(
-    JSON.parse(await readFile(join(otherMaterials, 'index.json'), 'utf8'))
-      .decks,
-    [],
+    [...files['default/materials/deck-1.csv'].subarray(0, 3)],
+    [239, 187, 191],
+  );
+  assert.equal(
+    strFromU8(files['default/materials/deck-1.csv']),
+    'front,definition,pronunciation,notes,image\r\n"Thuật ngữ, ""trích dẫn""","Dòng một\nDòng hai","","",""\r\n',
+  );
+  assert.equal(
+    Object.keys(files).some((key) => key.includes('../')),
+    false,
   );
   data.decks[0].cards[0].back = 'Đã sửa';
   assert.equal((await save(1, data)).statusCode, 200);
-  assert.match(await readFile(csvFile, 'utf8'), /Đã sửa/);
+  assert.match(
+    strFromU8((await archive())['default/materials/deck-1.csv']),
+    /Đã sửa/,
+  );
   assert.equal((await save(2, { ...data, decks: [] })).statusCode, 200);
-  await assert.rejects(readFile(csvFile), { code: 'ENOENT' });
+  files = await archive();
+  assert.equal(files['default/materials/deck-1.csv'], undefined);
   assert.equal(
     (
       await app.inject({
@@ -774,21 +795,17 @@ test('per-user CSV materials escape text, track edits/deletion/restore and regen
     ).statusCode,
     200,
   );
-  assert.match(await readFile(csvFile, 'utf8'), /Đã sửa/);
-  // Existing JSON-only installations get derived files without changing state/revision.
-  await rm(materials, { recursive: true });
   const restarted = buildApp({ dataFile });
-  t.after(() => restarted.close());
-  assert.equal((await restarted.inject('/api/profiles')).statusCode, 200);
-  assert.match(await readFile(csvFile, 'utf8'), /Đã sửa/);
+  assert.match(
+    strFromU8((await archive(restarted))['default/materials/deck-1.csv']),
+    /Đã sửa/,
+  );
   assert.equal((await restarted.inject('/api/state')).json().revision, 4);
-  assert.deepEqual(
-    JSON.parse(await readFile(join(otherMaterials, 'index.json'), 'utf8'))
-      .decks,
-    [],
+  await assert.rejects(
+    readFile(join(dataFile, '..', 'storage', 'default', 'state.json')),
+    { code: 'ENOENT' },
   );
 });
-
 test('user ZIP contains portable folder, CSV and remembered/starred progress and can restore', async (t) => {
   const { unzipSync, strFromU8 } = await import('fflate');
   const { app } = await fixture(t);
@@ -1059,10 +1076,15 @@ test('blog is shared, persists Markdown, and rejects stale edits', async (t) => 
 
   assert.equal((await app.inject('/api/blog')).json()[0].id, article.id);
   assert.equal(
-    await readFile(
-      join(dataFile, '..', 'storage', 'blog', `${article.id}.md`),
-      'utf8',
-    ),
+    JSON.parse(
+      String(
+        queryStorage(
+          join(dataFile, '..', 'storage'),
+          'SELECT document FROM articles WHERE id = ?',
+          article.id,
+        )?.document,
+      ),
+    ).markdown,
     body.markdown,
   );
   const edited = await app.inject({
@@ -1352,8 +1374,8 @@ test('rename keeps profile ID, learning revision and backups, rejects duplicate 
   );
   const storage = (await app.inject('/api/storage')).json().directory;
   assert.equal(
-    JSON.parse(await readFile(join(storage, 'default', 'user.json'), 'utf8'))
-      .name,
+    queryStorage(storage, 'SELECT name FROM profiles WHERE id = ?', 'default')
+      ?.name,
     'Bình',
   );
   const other = (

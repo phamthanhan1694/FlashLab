@@ -1,16 +1,22 @@
-import { cardsToCsv } from '@flashlab/shared';
-import { readFile, access, rm, mkdir } from 'node:fs/promises';
-import { zipSync, strToU8 } from 'fflate';
-import { randomUUID } from 'node:crypto';
-import { dirname, join, resolve } from 'node:path';
 import {
+  cardsToCsv,
   profilesSchema,
   profileIdSchema,
   normalizeTerm,
+  snapshotSchema,
   type Profile,
   type AppData,
+  type Snapshot,
 } from '@flashlab/shared';
-import { FileStore, writeAtomic, ConflictError } from './store.js';
+import { readFile, access } from 'node:fs/promises';
+import { zipSync, strToU8 } from 'fflate';
+import { randomUUID } from 'node:crypto';
+import { dirname, join, resolve } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+import { StorageDatabase } from './database.js';
+import { readLegacySnapshot, ConflictError } from './store.js';
+import { articleSchema, readLegacyArticles } from './blog.js';
+import { readLegacyImages, validateStoredImage } from './blog-images.js';
 
 export class ProfileError extends Error {
   constructor(
@@ -23,37 +29,16 @@ export class ProfileError extends Error {
 const missing = (error: unknown) =>
   error instanceof Error && 'code' in error && error.code === 'ENOENT';
 
-/** Registry/state operations share a queue so imports and deletion cannot race with saves. */
 export class Profiles {
-  private queue: Promise<unknown> = Promise.resolve();
-  private stores = new Map<string, FileStore>();
   readonly root: string;
+  readonly database: StorageDatabase;
+  private initialization?: Promise<void>;
   constructor(
     private legacyFile: string,
     root?: string,
   ) {
     this.root = resolve(root ?? join(dirname(legacyFile), 'storage'));
-  }
-  private run<T>(operation: () => Promise<T>): Promise<T> {
-    const result = this.queue.then(operation);
-    this.queue = result.catch(() => undefined);
-    return result;
-  }
-  private get registryFile() {
-    return join(this.root, 'profiles.json');
-  }
-  private folder(id: string) {
-    return join(this.root, profileIdSchema.parse(id));
-  }
-  private stateFile(id: string) {
-    return join(this.folder(id), 'state.json');
-  }
-  private createStore(id: string) {
-    return new FileStore(
-      this.stateFile(id),
-      id,
-      join(this.folder(id), 'materials'),
-    );
+    this.database = new StorageDatabase(this.root);
   }
   private async exists(file: string) {
     try {
@@ -64,159 +49,250 @@ export class Profiles {
       throw error;
     }
   }
-  private async registry(): Promise<Profile[]> {
-    try {
-      return profilesSchema.parse(
-        JSON.parse(await readFile(this.registryFile, 'utf8')),
-      );
-    } catch (error) {
-      if (!missing(error)) throw error;
-    }
-    // Copy without deleting originals; prefer the current default storage when moving to another disk.
-    const defaultRoot = resolve(join(dirname(this.legacyFile), 'storage'));
-    const sourceRoot =
-      defaultRoot !== this.root &&
-      (await this.exists(join(defaultRoot, 'profiles.json')))
-        ? defaultRoot
-        : undefined;
-    let profiles: Profile[];
-    try {
-      profiles = profilesSchema.parse(
-        JSON.parse(
-          await readFile(
-            sourceRoot
-              ? join(sourceRoot, 'profiles.json')
-              : `${this.legacyFile}.profiles.json`,
-            'utf8',
-          ),
-        ),
-      );
-    } catch (error) {
-      if (!missing(error)) throw error;
-      profiles = [
-        { id: 'default', name: 'Người dùng mặc định', created: Date.now() },
-      ];
-    }
-    for (const profile of profiles) {
-      const destination = this.stateFile(profile.id);
-      if (await this.exists(destination)) {
-        await this.createStore(profile.id).read();
-      } else {
-        const source = sourceRoot
-          ? join(sourceRoot, profile.id, 'state.json')
-          : profile.id === 'default'
-            ? this.legacyFile
-            : `${this.legacyFile}.profiles/${profile.id}.json`;
-        const snapshot = await new FileStore(source, profile.id).read();
-        await writeAtomic(destination, { ...snapshot, userId: profile.id });
-        await this.createStore(profile.id).read();
-      }
-      await writeAtomic(join(this.folder(profile.id), 'user.json'), profile);
-    }
-    await writeAtomic(this.registryFile, profiles);
-    return profiles;
+  private registry(): Profile[] {
+    return profilesSchema.parse(
+      this.database.db
+        .prepare('SELECT id, name, created FROM profiles ORDER BY rowid')
+        .all(),
+    );
   }
-  private async store(id: string) {
-    const profiles = await this.registry();
-    if (!profiles.some((p) => p.id === id))
-      throw new ProfileError('Người dùng không còn tồn tại.', 404);
-    let store = this.stores.get(id);
-    if (!store) {
-      store = this.createStore(id);
-      this.stores.set(id, store);
-    }
-    return store;
-  }
-  private checkName(profiles: Profile[], name: string) {
-    if (profiles.length >= 50)
-      throw new ProfileError('Tối đa 50 người dùng.', 400);
-    if (profiles.some((p) => normalizeTerm(p.name) === normalizeTerm(name)))
-      throw new ProfileError('Tên người dùng đã tồn tại với ID khác.', 409);
-  }
-  private async add(profiles: Profile[], profile: Profile, data: AppData) {
-    // Never overwrite an orphaned/external folder with an unregistered ID.
-    if (await this.exists(this.folder(profile.id)))
-      throw new ProfileError(
-        'Thư mục ID này đã tồn tại nhưng chưa có trong danh sách người dùng.',
-        409,
-      );
-    try {
-      await mkdir(this.folder(profile.id), { mode: 0o700 });
-    } catch (error) {
-      if (error instanceof Error && 'code' in error && error.code === 'EEXIST')
-        throw new ProfileError('Thư mục ID này đã tồn tại.', 409);
-      throw error;
-    }
-    try {
-      const store = this.createStore(profile.id);
-      const snapshot = await store.update(0, data);
-      await writeAtomic(join(this.folder(profile.id), 'user.json'), profile);
-      await writeAtomic(this.registryFile, [...profiles, profile]);
-      this.stores.set(profile.id, store);
-      return snapshot;
-    } catch (error) {
-      await rm(this.folder(profile.id), { recursive: true, force: true }).catch(
-        () => undefined,
-      );
-      throw error;
-    }
-  }
-
-  list() {
-    return this.run(async () => {
-      const profiles = await this.registry();
-      for (const profile of profiles)
-        await (await this.store(profile.id)).read();
-      return profiles;
+  private snapshot(id: string): Snapshot {
+    const row = this.database.db
+      .prepare('SELECT revision, data FROM profile_states WHERE profile_id = ?')
+      .get(id);
+    if (!row) throw new ProfileError('Người dùng không còn tồn tại.', 404);
+    return snapshotSchema.parse({
+      revision: row.revision,
+      data: row.data === null ? null : JSON.parse(String(row.data)),
     });
   }
-  create(name: string) {
-    return this.run(async () => {
-      const profiles = await this.registry();
-      this.checkName(profiles, name);
-      let id: string;
-      do {
-        id = randomUUID();
-      } while (
-        profiles.some((p) => p.id === id) ||
-        (await this.exists(this.folder(id)))
+  private insert(profile: Profile, snapshot: Snapshot) {
+    this.database.db
+      .prepare(
+        'INSERT INTO profiles (id, name, normalized_name, created) VALUES (?, ?, ?, ?)',
+      )
+      .run(
+        profile.id,
+        profile.name,
+        normalizeTerm(profile.name),
+        profile.created,
       );
-      const profile = { id, name, created: Date.now() };
-      await this.add(profiles, profile, {
-        version: 2,
-        decks: [],
-        sessions: [],
-        history: {},
+    this.database.db
+      .prepare(
+        'INSERT INTO profile_states (profile_id, revision, data) VALUES (?, ?, ?)',
+      )
+      .run(
+        profile.id,
+        snapshot.revision,
+        snapshot.data === null ? null : JSON.stringify(snapshot.data),
+      );
+  }
+  private async migrate() {
+    if (this.database.migrated('profiles')) return;
+    let records: { profile: Profile; snapshot: Snapshot }[];
+    let movedArticles:
+      Awaited<ReturnType<typeof readLegacyArticles>> | undefined;
+    let movedImages: Awaited<ReturnType<typeof readLegacyImages>> | undefined;
+    const defaultRoot = resolve(join(dirname(this.legacyFile), 'storage'));
+    if (
+      !(await this.exists(join(this.root, 'profiles.json'))) &&
+      defaultRoot !== this.root &&
+      (await this.exists(join(defaultRoot, 'flashlab.sqlite')))
+    ) {
+      const source = new DatabaseSync(join(defaultRoot, 'flashlab.sqlite'), {
+        readOnly: true,
+      });
+      try {
+        source.exec('BEGIN');
+        const profiles = profilesSchema.parse(
+          source
+            .prepare('SELECT id, name, created FROM profiles ORDER BY rowid')
+            .all(),
+        );
+        records = profiles.map((profile) => {
+          const row = source
+            .prepare(
+              'SELECT revision, data FROM profile_states WHERE profile_id = ?',
+            )
+            .get(profile.id);
+          if (!row) throw new Error('Missing source profile state');
+          return {
+            profile,
+            snapshot: snapshotSchema.parse({
+              revision: row.revision,
+              data: row.data === null ? null : JSON.parse(String(row.data)),
+            }),
+          };
+        });
+        if (
+          source.prepare('SELECT 1 FROM metadata WHERE key = ?').get('articles')
+        ) {
+          movedArticles = source
+            .prepare('SELECT document FROM articles ORDER BY rowid')
+            .all()
+            .map((row) =>
+              articleSchema.parse(JSON.parse(String(row.document))),
+            );
+        }
+        if (
+          source.prepare('SELECT 1 FROM metadata WHERE key = ?').get('images')
+        ) {
+          movedImages = source
+            .prepare('SELECT name, data FROM images')
+            .all()
+            .map((row) => {
+              if (!(row.data instanceof Uint8Array))
+                throw new Error('Invalid stored image');
+              return {
+                name: String(row.name),
+                ...validateStoredImage(String(row.name), row.data),
+              };
+            });
+        }
+        source.exec('COMMIT');
+      } finally {
+        source.close();
+      }
+      movedArticles ??= await readLegacyArticles(join(defaultRoot, 'blog'));
+      movedImages ??= await readLegacyImages(
+        join(defaultRoot, 'blog', 'images'),
+      );
+    } else {
+      let sourceRoot: string | undefined;
+      if (await this.exists(join(this.root, 'profiles.json')))
+        sourceRoot = this.root;
+      else if (
+        defaultRoot !== this.root &&
+        (await this.exists(join(defaultRoot, 'profiles.json')))
+      )
+        sourceRoot = defaultRoot;
+      let profiles: Profile[];
+      try {
+        profiles = profilesSchema.parse(
+          JSON.parse(
+            await readFile(
+              sourceRoot
+                ? join(sourceRoot, 'profiles.json')
+                : `${this.legacyFile}.profiles.json`,
+              'utf8',
+            ),
+          ),
+        );
+      } catch (error) {
+        if (!missing(error)) throw error;
+        profiles = [
+          { id: 'default', name: 'Người dùng mặc định', created: Date.now() },
+        ];
+      }
+      records = await Promise.all(
+        profiles.map(async (profile) => ({
+          profile,
+          snapshot: await readLegacySnapshot(
+            sourceRoot
+              ? join(sourceRoot, profile.id, 'state.json')
+              : profile.id === 'default'
+                ? this.legacyFile
+                : `${this.legacyFile}.profiles/${profile.id}.json`,
+            profile.id,
+          ),
+        })),
+      );
+    }
+    // Validate every source before importing any row. A failed migration remains retryable.
+    this.database.transaction(() => {
+      if (this.database.migrated('profiles')) return;
+      for (const record of records)
+        this.insert(record.profile, record.snapshot);
+      if (movedArticles) {
+        for (const article of movedArticles)
+          this.database.db
+            .prepare(
+              'INSERT OR REPLACE INTO articles (id, revision, document) VALUES (?, ?, ?)',
+            )
+            .run(article.id, article.revision, JSON.stringify(article));
+        this.database.db
+          .prepare('INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)')
+          .run('articles', '1');
+      }
+      if (movedImages) {
+        for (const image of movedImages)
+          this.database.db
+            .prepare(
+              'INSERT OR REPLACE INTO images (name, type, data) VALUES (?, ?, ?)',
+            )
+            .run(image.name, image.type, image.bytes);
+        this.database.db
+          .prepare('INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)')
+          .run('images', '1');
+      }
+      this.database.markMigrated('profiles');
+    });
+  }
+  private ready() {
+    return (this.initialization ??= this.migrate().catch((error) => {
+      this.initialization = undefined;
+      throw error;
+    }));
+  }
+  private checkName(profiles: Profile[], name: string, except?: string) {
+    if (!except && profiles.length >= 50)
+      throw new ProfileError('Tối đa 50 người dùng.', 400);
+    if (
+      profiles.some(
+        (p) => p.id !== except && normalizeTerm(p.name) === normalizeTerm(name),
+      )
+    )
+      throw new ProfileError('Tên người dùng đã tồn tại với ID khác.', 409);
+  }
+  private updateState(id: string, revision: number, data: AppData) {
+    const current = this.snapshot(id);
+    if (current.revision !== revision)
+      throw new ConflictError('State changed; reload before saving');
+    const next = snapshotSchema.parse({ revision: revision + 1, data });
+    this.database.db
+      .prepare(
+        'UPDATE profile_states SET revision = ?, data = ? WHERE profile_id = ? AND revision = ?',
+      )
+      .run(next.revision, JSON.stringify(next.data), id, revision);
+    return next;
+  }
+  async list() {
+    await this.ready();
+    return this.registry();
+  }
+  async create(name: string) {
+    await this.ready();
+    return this.database.transaction(() => {
+      this.checkName(this.registry(), name);
+      const profile = { id: randomUUID(), name, created: Date.now() };
+      this.insert(profile, {
+        revision: 1,
+        data: { version: 2, decks: [], sessions: [], history: {} },
       });
       return profile;
     });
   }
-  rename(id: string, name: string) {
-    return this.run(async () => {
-      const profiles = await this.registry();
+  async rename(id: string, name: string) {
+    await this.ready();
+    return this.database.transaction(() => {
+      const profiles = this.registry();
       const profile = profiles.find((p) => p.id === id);
       if (!profile)
         throw new ProfileError('Người dùng không còn tồn tại.', 404);
-      if (
-        profiles.some(
-          (p) => p.id !== id && normalizeTerm(p.name) === normalizeTerm(name),
+      this.checkName(profiles, name, id);
+      this.database.db
+        .prepare(
+          'UPDATE profiles SET name = ?, normalized_name = ? WHERE id = ?',
         )
-      )
-        throw new ProfileError('Tên người dùng đã tồn tại với ID khác.', 409);
-      const updated = { ...profile, name };
-      await writeAtomic(
-        this.registryFile,
-        profiles.map((p) => (p.id === id ? updated : p)),
-      );
-      await writeAtomic(join(this.folder(id), 'user.json'), updated);
-      return updated;
+        .run(name, normalizeTerm(name), id);
+      return { ...profile, name };
     });
   }
-  exportFolder(id: string) {
-    return this.run(async () => {
-      const store = await this.store(id);
-      const profile = (await this.registry()).find((p) => p.id === id)!;
-      const snapshot = await store.read();
+  async exportFolder(id: string) {
+    await this.ready();
+    return this.database.transaction(() => {
+      const snapshot = this.snapshot(id);
+      const profile = this.registry().find((p) => p.id === id)!;
       const files: Record<string, Uint8Array> = {};
       const add = (name: string, text: string) => {
         files[`${id}/${name}`] = strToU8(text);
@@ -236,47 +312,47 @@ export class Profiles {
       return Buffer.from(zipSync(files));
     });
   }
-  delete(id: string) {
-    return this.run(async () => {
-      const profiles = await this.registry();
+  async delete(id: string) {
+    await this.ready();
+    this.database.transaction(() => {
+      const profiles = this.registry();
       if (!profiles.some((p) => p.id === id))
         throw new ProfileError('Người dùng không còn tồn tại.', 404);
       if (profiles.length === 1)
         throw new ProfileError('Cần giữ lại ít nhất một người dùng.', 400);
-      await writeAtomic(
-        this.registryFile,
-        profiles.filter((p) => p.id !== id),
-      );
-      await rm(this.folder(id), { recursive: true, force: true });
-      this.stores.delete(id);
+      this.database.db.prepare('DELETE FROM profiles WHERE id = ?').run(id);
     });
   }
-  read(id: string) {
-    return this.run(async () => (await this.store(id)).read());
+  async read(id: string) {
+    await this.ready();
+    return this.snapshot(id);
   }
-  update(id: string, revision: number, data: AppData) {
-    return this.run(async () => (await this.store(id)).update(revision, data));
+  async update(id: string, revision: number, data: AppData) {
+    await this.ready();
+    return this.database.transaction(() =>
+      this.updateState(id, revision, data),
+    );
   }
-  restore(
+  async restore(
     id: string,
     name: string | undefined,
     revision: number | null,
     data: AppData,
     created?: number,
   ) {
-    return this.run(async () => {
-      const profiles = await this.registry();
+    profileIdSchema.parse(id);
+    await this.ready();
+    return this.database.transaction(() => {
+      const profiles = this.registry();
       const existing = profiles.find((p) => p.id === id);
       if (existing) {
         if (revision === null)
           throw new ConflictError(
             'Người dùng vừa được tạo. Hãy tải lại danh sách trước khi nhập.',
           );
-        const store = this.stores.get(id) ?? this.createStore(id);
-        this.stores.set(id, store);
         return {
           profile: existing,
-          snapshot: await store.update(revision, data),
+          snapshot: this.updateState(id, revision, data),
         };
       }
       if (revision !== null)
@@ -290,7 +366,12 @@ export class Profiles {
         );
       this.checkName(profiles, name);
       const profile = { id, name, created: created ?? Date.now() };
-      return { profile, snapshot: await this.add(profiles, profile, data) };
+      const snapshot = snapshotSchema.parse({ revision: 1, data });
+      this.insert(profile, snapshot);
+      return { profile, snapshot };
     });
+  }
+  close() {
+    this.database.close();
   }
 }

@@ -1,15 +1,16 @@
-import { readFile, mkdir, rename, writeFile, unlink } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { profileIdSchema, type Profile } from '@flashlab/shared';
-import { writeAtomic, ConflictError } from './store.js';
+import { ConflictError } from './store.js';
+import { StorageDatabase } from './database.js';
 export const articleInput = z.object({
   author: z.string().trim().min(1).max(60).optional(),
   title: z.string().trim().min(1).max(200),
   markdown: z.string().trim().min(1).max(200000),
 });
-const article = articleInput.extend({
+export const articleSchema = articleInput.extend({
   author: z.string().trim().min(1).max(60),
   ownerId: profileIdSchema.optional(),
   id: z.string().uuid(),
@@ -17,7 +18,18 @@ const article = articleInput.extend({
   created: z.number(),
   updated: z.number(),
 });
-const catalog = z.array(article);
+const catalog = z.array(articleSchema);
+export async function readLegacyArticles(directory: string) {
+  try {
+    return catalog.parse(
+      JSON.parse(await readFile(join(directory, 'index.json'), 'utf8')),
+    );
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT')
+      return [];
+    throw error;
+  }
+}
 export class BlogAccessError extends Error {
   constructor(
     message: string,
@@ -27,28 +39,53 @@ export class BlogAccessError extends Error {
   }
 }
 export class BlogStore {
-  private queue: Promise<unknown> = Promise.resolve();
-  constructor(private directory: string) {}
-  async list() {
-    try {
-      return catalog.parse(
-        JSON.parse(await readFile(join(this.directory, 'index.json'), 'utf8')),
-      );
-    } catch (error) {
-      if (error instanceof Error && 'code' in error && error.code === 'ENOENT')
-        return [];
-      throw error;
-    }
+  private initialization?: Promise<void>;
+  constructor(
+    private directory: string,
+    private database: StorageDatabase,
+  ) {}
+  private async migrate() {
+    if (this.database.migrated('articles')) return;
+    const articles = await readLegacyArticles(this.directory);
+    this.database.transaction(() => {
+      if (this.database.migrated('articles')) return;
+      // Insert oldest first to preserve the old newest-first listing.
+      for (const item of [...articles].reverse())
+        this.database.db
+          .prepare(
+            'INSERT INTO articles (id, revision, document) VALUES (?, ?, ?)',
+          )
+          .run(item.id, item.revision, JSON.stringify(item));
+      this.database.markMigrated('articles');
+    });
   }
-  save(
+  private ready() {
+    return (this.initialization ??= this.migrate().catch((error) => {
+      this.initialization = undefined;
+      throw error;
+    }));
+  }
+  private records() {
+    return catalog.parse(
+      this.database.db
+        .prepare('SELECT document FROM articles ORDER BY rowid DESC')
+        .all()
+        .map((row) => JSON.parse(String(row.document))),
+    );
+  }
+  async list() {
+    await this.ready();
+    return this.records();
+  }
+  async save(
     body: z.infer<typeof articleInput>,
     owner: Profile,
     id?: string,
     revision?: number,
   ) {
-    const operation = this.queue.then(async () => {
-      const articles = await this.list();
-      const previous = id ? articles.find((a) => a.id === id) : undefined;
+    await this.ready();
+    return this.database.transaction(() => {
+      const previous = id ? this.records().find((a) => a.id === id) : undefined;
       if (id && !previous)
         throw new BlogAccessError('Không tìm thấy bài viết.', 404);
       if (previous && previous.ownerId !== owner.id)
@@ -60,7 +97,7 @@ export class BlogStore {
         throw new ConflictError(
           'Bài viết đã thay đổi. Hãy tải lại trước khi sửa.',
         );
-      const next = article.parse({
+      const next = articleSchema.parse({
         ...body,
         author: body.author ?? previous?.author ?? owner.name,
         ownerId: owner.id,
@@ -69,28 +106,18 @@ export class BlogStore {
         created: previous?.created ?? Date.now(),
         updated: Date.now(),
       });
-      await mkdir(this.directory, { recursive: true });
-      const file = join(this.directory, `${next.id}.md`);
-      const temporary = `${file}.${randomUUID()}.tmp`;
-      try {
-        await writeFile(temporary, next.markdown, 'utf8');
-        await rename(temporary, file);
-      } finally {
-        await unlink(temporary).catch(() => undefined);
-      }
-      await writeAtomic(join(this.directory, 'index.json'), [
-        next,
-        ...articles.filter((a) => a.id !== next.id),
-      ]);
+      this.database.db
+        .prepare(
+          'INSERT INTO articles (id, revision, document) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET revision = excluded.revision, document = excluded.document',
+        )
+        .run(next.id, next.revision, JSON.stringify(next));
       return next;
     });
-    this.queue = operation.catch(() => undefined);
-    return operation;
   }
-  delete(id: string, ownerId: string, revision: number) {
-    const operation = this.queue.then(async () => {
-      const articles = await this.list();
-      const previous = articles.find((article) => article.id === id);
+  async delete(id: string, ownerId: string, revision: number) {
+    await this.ready();
+    this.database.transaction(() => {
+      const previous = this.records().find((a) => a.id === id);
       if (!previous) throw new BlogAccessError('Không tìm thấy bài viết.', 404);
       if (previous.ownerId !== ownerId)
         throw new BlogAccessError(
@@ -101,20 +128,7 @@ export class BlogStore {
         throw new ConflictError(
           'Bài viết đã thay đổi. Hãy tải lại trước khi xóa.',
         );
-      await writeAtomic(
-        join(this.directory, 'index.json'),
-        articles.filter((article) => article.id !== id),
-      );
-      await unlink(join(this.directory, `${id}.md`)).catch((error: unknown) => {
-        if (!(
-          error instanceof Error &&
-          'code' in error &&
-          error.code === 'ENOENT'
-        ))
-          throw error;
-      });
+      this.database.db.prepare('DELETE FROM articles WHERE id = ?').run(id);
     });
-    this.queue = operation.catch(() => undefined);
-    return operation;
   }
 }

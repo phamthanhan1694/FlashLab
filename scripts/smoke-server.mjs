@@ -7,6 +7,7 @@ import { mkdtemp, rm, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
+import { DatabaseSync } from 'node:sqlite';
 
 // Exercise the production entry point over real HTTP using isolated runtime data.
 test('production server serves frontend assets and persists API data', async (t) => {
@@ -155,13 +156,15 @@ test('production server serves frontend assets and persists API data', async (t)
     }),
   });
   assert.equal(overwrite.status, 200);
-  const disk = JSON.parse(
-    await readFile(
-      join(directory, 'storage', profile.id, 'state.json'),
-      'utf8',
-    ),
+  const database = new DatabaseSync(
+    join(directory, 'storage', 'flashlab.sqlite'),
+    { readOnly: true },
   );
-  assert.equal(disk.userId, profile.id);
+  const row = database
+    .prepare('SELECT revision, data FROM profile_states WHERE profile_id = ?')
+    .get(profile.id);
+  database.close();
+  const disk = { revision: row.revision, data: JSON.parse(row.data) };
   assert.deepEqual(disk.data.preferences, settings);
   assert.equal(disk.revision, personal.revision + 2);
 
