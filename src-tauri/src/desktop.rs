@@ -4,12 +4,21 @@ use std::{
     io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::{mpsc, Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc, Mutex,
+    },
     time::Duration,
 };
 use tauri::Manager;
+use tauri_plugin_dialog::{
+    DialogExt, MessageDialogButtons, MessageDialogKind, MessageDialogResult,
+};
 
-struct Backend(Arc<Mutex<Option<Child>>>);
+struct Backend {
+    child: Mutex<Option<Child>>,
+    stopped: AtomicBool,
+}
 
 fn backend_command(node: &Path, resources: &Path, data: &Path) -> Command {
     // Tauri can return verbatim Windows paths (\\?\C:\...). Node's main-module
@@ -57,6 +66,104 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     };
     let app_data = app.path().app_data_dir()?;
     fs::create_dir_all(&app_data)?;
+    app.manage(Backend {
+        child: Mutex::new(None),
+        stopped: AtomicBool::new(false),
+    });
+    let handle = app.handle().clone();
+    // Native dialogs must run outside the UI thread. Only start the backend
+    // readiness timer after the user has chosen a data location.
+    std::thread::spawn(move || {
+        let result = choose_initial_storage(&handle, &resources, &app_data).and_then(|proceed| {
+            if proceed {
+                launch_backend(&handle, &node, &resources, &app_data)
+                    .map_err(|error| error.to_string())
+            } else {
+                handle.exit(0);
+                Ok(())
+            }
+        });
+        if let Err(message) = result {
+            show_startup_error(&handle, &message, &app_data.join("startup.log"));
+        }
+    });
+    Ok(())
+}
+
+fn choose_initial_storage(
+    app: &tauri::AppHandle,
+    resources: &Path,
+    app_data: &Path,
+) -> Result<bool, String> {
+    if !crate::storage_setup::needs_setup(app_data)? {
+        return Ok(true);
+    }
+    let template = resources.join("config.example.json");
+    let default = crate::storage_setup::default_directory(app_data, &template)?;
+    let window = app
+        .get_webview_window("main")
+        .ok_or("Không tìm thấy cửa sổ FlashLab.")?;
+    loop {
+        if app.state::<Backend>().stopped.load(Ordering::Acquire) {
+            return Ok(false);
+        }
+        let choice = app.dialog().message(format!(
+            "Hồ sơ, thẻ, tiến độ và ảnh sẽ được lưu trong thư mục bạn chọn.\n\nMặc định: {}\n\nCó thể chọn thư mục FlashLab đã có dữ liệu để tiếp tục sử dụng.",
+            dunce::simplified(&default).display()
+        )).title("Nơi lưu dữ liệu FlashLab").parent(&window)
+            .buttons(MessageDialogButtons::YesNoCancelCustom(
+                "Chọn thư mục".into(), "Dùng mặc định".into(), "Đóng".into()
+            )).blocking_show_with_result();
+        let selected = match choice {
+            MessageDialogResult::Yes => true,
+            MessageDialogResult::No => false,
+            MessageDialogResult::Custom(ref label) if label == "Chọn thư mục" => true,
+            MessageDialogResult::Custom(ref label) if label == "Dùng mặc định" => false,
+            _ => return Ok(false),
+        };
+        let directory = if selected {
+            let picked = app
+                .dialog()
+                .file()
+                .set_parent(&window)
+                .set_title("Chọn thư mục lưu dữ liệu FlashLab")
+                .set_directory(
+                    app.path()
+                        .document_dir()
+                        .unwrap_or_else(|_| app_data.to_owned()),
+                )
+                .blocking_pick_folder();
+            match picked {
+                Some(path) => Some(path.into_path().map_err(|error| error.to_string())?),
+                None => continue,
+            }
+        } else {
+            None
+        };
+        if app.state::<Backend>().stopped.load(Ordering::Acquire) {
+            return Ok(false);
+        }
+        match crate::storage_setup::initialize(app_data, &template, directory.as_deref()) {
+            Ok(()) => return Ok(true),
+            Err(message) => {
+                app.dialog()
+                    .message(message)
+                    .title("Chưa lưu được dữ liệu")
+                    .parent(&window)
+                    .kind(MessageDialogKind::Error)
+                    .buttons(MessageDialogButtons::OkCustom("Chọn lại".into()))
+                    .blocking_show();
+            }
+        }
+    }
+}
+
+fn launch_backend(
+    app: &tauri::AppHandle,
+    node: &Path,
+    resources: &Path,
+    app_data: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
     let log_path = app_data.join("startup.log");
     let mut log = OpenOptions::new()
         .create(true)
@@ -73,11 +180,19 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             app_data.display()
         );
     }
-    let mut child = backend_command(&node, &resources, &app_data).spawn()?;
+    let state = app.state::<Backend>();
+    let mut guard = state
+        .child
+        .lock()
+        .map_err(|_| "Không khóa được tiến trình backend.")?;
+    if state.stopped.load(Ordering::Acquire) {
+        return Ok(());
+    }
+    let mut child = backend_command(node, resources, app_data).spawn()?;
     let stdout = child.stdout.take().ok_or("Missing backend stdout")?;
     let stderr = child.stderr.take().ok_or("Missing backend stderr")?;
-    let state = Arc::new(Mutex::new(Some(child)));
-    app.manage(Backend(state.clone()));
+    *guard = Some(child);
+    drop(guard);
     let (sender, receiver) = mpsc::channel::<Result<String, String>>();
     let errors = sender.clone();
     std::thread::spawn(move || {
@@ -109,7 +224,7 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     });
-    let handle = app.handle().clone();
+    let handle = app.clone();
     std::thread::spawn(move || {
         let result = receiver
             .recv_timeout(Duration::from_secs(30))
@@ -150,7 +265,8 @@ fn show_startup_error(app: &tauri::AppHandle, message: &str, log_path: &Path) {
 
 pub fn stop(app: &tauri::AppHandle) {
     if let Some(state) = app.try_state::<Backend>() {
-        if let Ok(mut guard) = state.0.lock() {
+        state.stopped.store(true, Ordering::Release);
+        if let Ok(mut guard) = state.child.lock() {
             if let Some(mut child) = guard.take() {
                 // End stdin first so Fastify can finish writes and close cleanly.
                 drop(child.stdin.take());
@@ -225,6 +341,13 @@ mod tests {
         fs::create_dir_all(&data).unwrap();
         let resources = resources.canonicalize().unwrap();
         let data = data.canonicalize().unwrap();
+        let selected = fixture.directory.join("Kho dữ liệu đã chọn");
+        crate::storage_setup::initialize(
+            &data,
+            &resources.join("config.example.json"),
+            Some(&selected),
+        )
+        .unwrap();
         assert!(resources.to_string_lossy().starts_with(r"\\?\"));
         let mut child = backend_command(&node, &resources, &data).spawn().unwrap();
         let stdout = child.stdout.take().unwrap();
@@ -264,6 +387,6 @@ mod tests {
         assert!(ready.is_ok(), "Backend did not become ready: {errors}");
         assert!(status.success(), "Backend exited with {status}: {errors}");
         assert!(data.join("config.json").is_file());
-        assert!(data.join("data/profiles/flashlab.sqlite").is_file());
+        assert!(selected.join("flashlab.sqlite").is_file());
     }
 }
