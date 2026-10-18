@@ -38,6 +38,8 @@ npm ci
 npm run desktop:build -- --bundles nsis
 ```
 
+Có thể nhấp đúp `build-flashcard.bat` trong repo để tạo bộ cài EXE. File này tự chuyển vào thư mục chứa chính nó và cài dependencies nếu thiếu, nên không phụ thuộc thư mục PowerShell đang mở. Các công cụ Node.js, Rust/MSVC và Windows SDK ở trên vẫn phải được cài trên máy build.
+
 Bộ cài EXE nằm trong:
 
 ```text
@@ -83,11 +85,21 @@ Trong ứng dụng, vào **Tổng quan → Hướng dẫn → Sao lưu và lưu 
 
 Để chuyển dữ liệu sang máy khác hoặc từ web sang desktop:
 
-1. Vào **Cài đặt → Xuất thư mục ZIP** trên bản đang dùng.
-2. Chép ZIP sang máy đích và giải nén.
-3. Mở menu người dùng → **Nhập thư mục người dùng**, chọn thư mục hồ sơ vừa giải nén.
+1. Vào **Cài đặt → Sao lưu hồ sơ (.sqlite)** hoặc **Sao lưu toàn bộ (.sqlite)** trên bản đang dùng.
+2. Chép file `.sqlite` sang máy đích.
+3. Chọn **Khôi phục từ database** trong Cài đặt hoặc menu người dùng, xem phạm vi rồi xác nhận.
 
-ZIP hồ sơ giữ học phần, tiến độ, cấu hình và ghi chú cá nhân. Bài viết dùng chung cần sao lưu riêng thư mục `blog` trong kho dữ liệu. Bộ cài không mang theo dữ liệu cá nhân của máy build và không tự đồng bộ dữ liệu giữa các máy.
+Database hồ sơ giữ đầy đủ học phần/thẻ nhiều nghĩa/ảnh, lớp học, tiến độ, lịch sử và kết quả từng câu, cấu hình, ghi chú, bài viết do hồ sơ đó sở hữu và ảnh liên quan. Sao lưu toàn bộ giữ mọi hồ sơ, bài viết và toàn bộ ảnh trong một file độc lập. Trước khi khôi phục, ứng dụng tự lưu database dự phòng vào `restore-backups` trong thư mục lưu trữ. Bộ cài không mang theo dữ liệu cá nhân của máy build và không tự đồng bộ dữ liệu giữa các máy.
+
+### Cơ sở dữ liệu SQLite và bộ nhớ trình duyệt
+
+Backend lưu hồ sơ, trạng thái học, bài viết và ảnh trong `flashlab.sqlite` tại `storage.directory` (hoặc `STORAGE_DIR`). Với cấu hình mẫu, file nằm ở `data/profiles/flashlab.sqlite`. SQLite dùng transaction, WAL và kiểm tra revision để tránh ghi đè thay đổi. Trạng thái học được lưu dưới dạng tài liệu JSON riêng cho từng hồ sơ trong bảng `profile_states`; hồ sơ và bài viết có bảng riêng. Không cần cài máy chủ database hoặc thư viện native bổ sung; ứng dụng dùng `node:sqlite` có sẵn trong Node.js 22.14+ và Node runtime của bản desktop.
+
+Lần đầu truy cập, dữ liệu JSON cũ được kiểm tra rồi nhập vào SQLite trong một transaction. File gốc được giữ nguyên. Nếu dữ liệu cũ hỏng, ứng dụng báo lỗi và không đánh dấu chuyển đổi thành công. Sau khi chuyển đổi, SQLite là nguồn dữ liệu chính; sửa file JSON cũ không thay đổi dữ liệu ứng dụng. Sao lưu mặc định là file SQLite độc lập. Định dạng ZIP/JSON cũ vẫn được hỗ trợ để tương thích.
+
+Trình duyệt dùng **IndexedDB** để lưu bản đệm và thay đổi chờ đồng bộ. Dữ liệu học cũ trong `localStorage` được chuyển sang IndexedDB và chỉ xóa bản cũ sau khi ghi thành công. `localStorage` chỉ còn dùng cho tùy chọn nhỏ như hồ sơ đang chọn, giao diện và âm thanh. Việc này giảm các lần ghi JSON lớn đồng bộ trên luồng giao diện; chưa loại bỏ chi phí xử lý/render dữ liệu lớn khác.
+
+Chọn Sao lưu toàn bộ trong Cài đặt để xuất snapshot SQLite nhất quán khi ứng dụng đang chạy, không cần ghép WAL/SHM hay file ảnh. Giới hạn file hiện tại là 100 MB; vượt giới hạn sẽ báo lỗi, không cắt bớt dữ liệu. Nếu sao chép thư mục thủ công, cần dừng backend trước. Xem thêm [hướng dẫn lưu trữ](docs/storage.md).
 
 ## Chạy bản web từ mã nguồn
 
@@ -126,7 +138,9 @@ Backend phục vụ cả API và frontend đã build trên cùng một cổng. P
 
 ### Script khởi động và WSL
 
-`./start-flashcard.sh` và `start-flashcard.bat` dùng để khởi động bản web từ mã nguồn, không phải bộ cài desktop. BAT có địa chỉ WSL dự phòng theo máy phát triển; trên máy khác nên chạy ở thư mục dự án hoặc chỉ định đường dẫn bằng tham số, `FLASHLAB_PROJECT_DIR` hay `start-flashcard-path.txt`.
+Các file `.bat` chỉ dùng `node.exe`/`npm.cmd` và công cụ Windows, không gọi WSL hoặc Bash. Đường dẫn project thuộc hệ thống file Linux sẽ bị từ chối để tránh tự khởi động distro. Nếu chạy Linux/WSL, chủ động dùng bản `.sh` riêng.
+
+`./start-flashcard.sh` và `start-flashcard.bat` dùng để khởi động bản web từ mã nguồn, không phải bộ cài desktop. Trên Windows, clone hoặc giải nén repo vào thư mục bất kỳ rồi mở `start-flashcard.bat`; BAT mặc định dùng thư mục chứa chính nó, không phụ thuộc tên tài khoản hay ổ đĩa. Nếu muốn chạy một bản project khác, chỉ định đường dẫn bằng tham số, `FLASHLAB_PROJECT_DIR` hay file `start-flashcard-path.txt` riêng của máy (không commit). Thứ tự ưu tiên là tham số → biến môi trường → file đường dẫn → thư mục chứa BAT. Đường dẫn tương đối trong các tùy chọn BAT được tính từ thư mục chứa BAT. Lần đầu BAT tự tạo cấu hình từ file mẫu và cài dependencies nếu cần; máy chạy cần có Node.js/npm.
 
 Trong WSL, dùng Node/npm Linux. Kiểm tra bằng `command -v node`, `command -v npm` và `node -p process.platform`; platform phải là `linux`. Nếu gặp lỗi `CMD.EXE`, UNC hoặc đường dẫn `/mnt/c/.../npm`, sửa PATH để dùng Node/npm Linux rồi chạy lại `npm ci`.
 
@@ -142,7 +156,7 @@ book,n.::sách|v.::đặt chỗ,/bʊk/,Ví dụ về từ nhiều nghĩa,
 hello,xin chào,,,
 ```
 
-Excel `.xlsx` dùng cùng năm cột; nhập trang tính đầu tiên. Trường chứa dấu phẩy, dấu nháy hoặc xuống dòng phải được trích dẫn đúng chuẩn CSV. Xuất thẻ dùng để trao đổi nội dung; muốn giữ tiến độ thì dùng bản sao lưu ZIP.
+Excel `.xlsx` dùng cùng năm cột; nhập trang tính đầu tiên. Trường chứa dấu phẩy, dấu nháy hoặc xuống dòng phải được trích dẫn đúng chuẩn CSV. Xuất thẻ dùng để trao đổi nội dung; muốn giữ tiến độ thì dùng bản sao lưu SQLite.
 
 Nhập text, CSV, Excel và thêm từng thẻ thủ công đều dùng chung bảng so sánh thẻ trùng. Có thể bỏ qua, ghi đè, bổ sung hoặc **Sửa trước khi nhập**. Phần sửa cho phép chỉnh đầy đủ nội dung, thêm/xóa nghĩa, chọn từ loại riêng và giữ bản nháp khi chuyển trang. Ghi đè đặt lại tiến độ; bổ sung giữ tiến độ, thêm cặp nghĩa–từ loại chưa có và điền trường còn trống.
 

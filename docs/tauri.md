@@ -79,7 +79,9 @@ Desktop dùng `app_data_dir` của Tauri cho `com.flashlab.app`:
 
 Lần đầu chạy, ứng dụng tạo `config.json` từ cấu hình mẫu bên trong thư mục này. Mặc định hồ sơ lưu tại `data/profiles` **tương đối với thư mục cấu hình desktop**. Có thể sửa `storage.directory` thành thư mục tuyệt đối để chọn kho khác; thoát app trước khi sửa. Đường dẫn thực tế cũng có trong Hướng dẫn → Sao lưu và lưu trữ trong ứng dụng.
 
-Desktop không đọc `.env` hoặc `flashlab.config.json` riêng của bản web và không tự nhập/chỉnh sửa kho web hiện tại. Để chuyển dữ liệu, xuất ZIP từ bản web, giải nén rồi dùng Nhập thư mục người dùng trong bản desktop.
+Desktop không đọc `.env` hoặc `flashlab.config.json` riêng của bản web và không tự nhập/chỉnh sửa kho web hiện tại. Để chuyển dữ liệu, chọn Sao lưu hồ sơ hoặc Sao lưu toàn bộ trong Cài đặt của bản web, rồi chọn Khôi phục từ database ở bản desktop và mở file `.sqlite`. Không cần giải nén hoặc ghép file ảnh.
+
+Dữ liệu chính nằm trong `flashlab.sqlite` ở thư mục lưu trữ đã cấu hình. Node sidecar cung cấp SQLite có sẵn trong Node.js; không cần cài thêm database trên máy nhận. JSON cũ được tự nhập và giữ nguyên bản gốc. Trình duyệt/WebView dùng IndexedDB cho dữ liệu chờ đồng bộ. Xem [lưu trữ và sao lưu](storage.md).
 
 Backend chỉ bind `127.0.0.1`, ưu tiên cổng API trong cấu hình desktop và dò cổng kế tiếp khi cổng bị chiếm. Ứng dụng chỉ mở cửa sổ học sau khi backend báo sẵn sàng; backend lỗi sẽ hiện thông báo trên màn hình khởi động. Trang học chạy cùng origin với API nên giữ nguyên đồng bộ, CSV/Excel, ảnh và âm thanh. Các trang HTTP không được cấp quyền gọi lệnh native; không mở quyền shell/file cho JavaScript.
 

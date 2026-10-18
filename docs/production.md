@@ -35,6 +35,8 @@ Chỉ sao chép `flashlab.config.example.json` khi chưa có cấu hình riêng.
 
 Dữ liệu người dùng nằm tại `storage.directory` hoặc `STORAGE_DIR`, tách khỏi các thư mục `dist`. Không đặt dữ liệu vào `public`. `.env` được bỏ qua khi quản lý phiên bản; `.env.example` chỉ chứa ví dụ không có bí mật. Sau khi đổi cấu hình hoặc mã backend, khởi động lại ứng dụng.
 
+Database là `flashlab.sqlite` trong thư mục này, bao gồm cả ảnh bài viết. Trong Cài đặt, Sao lưu toàn bộ tạo một file `.sqlite` nhất quán ngay khi backend đang chạy; Khôi phục từ database có xem trước, xác nhận và tự tạo bản dự phòng trước khi ghi. JSON và ảnh cũ được giữ nguyên sau khi chuyển sang SQLite. Nếu sao chép thủ công cả thư mục, dừng backend trước. Xem [chi tiết chuyển đổi và sao lưu](storage.md).
+
 `npm run build` dọn riêng các thư mục đầu ra sinh tự động trước khi build; tài nguyên gốc và dữ liệu người dùng không bị xóa.
 
 ## Kiểm tra
