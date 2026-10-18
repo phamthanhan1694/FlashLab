@@ -13,11 +13,13 @@ FlashLab có bản web dùng backend Node.js và phần tích hợp desktop Taur
 
 Bộ cài desktop mang theo Node runtime, backend, giao diện, hình ảnh và âm thanh. Máy nhận không cần cài Node.js, npm, Rust, Visual Studio hoặc tải mã nguồn. Cài xong, mở **FlashLab** từ Start Menu hoặc shortcut do bộ cài tạo.
 
+Lần mở đầu tiên, chọn **Chọn thư mục** để lưu database ở nơi bạn muốn hoặc **Dùng mặc định** để lưu trong thư mục dữ liệu ứng dụng của tài khoản Windows. FlashLab kiểm tra quyền ghi, nhớ lựa chọn trên máy đó và dùng lại ở những lần mở sau. Máy đã có cấu hình tiếp tục dùng kho dữ liệu hiện tại. Xem [chi tiết chọn nơi lưu](docs/tauri.md#chia-sẻ-cho-máy-windows-khác).
+
 Windows cần WebView2 để hiển thị giao diện. Với cấu hình Tauri mặc định hiện tại, bộ cài tải và cài WebView2 nếu máy chưa có; bước này cần Internet. Khi các thành phần đã được cài đầy đủ, bản desktop dùng dữ liệu tại máy và có thể học offline. Xem [tùy chọn bộ cài Windows và WebView2 của Tauri](https://v2.tauri.app/distribute/windows-installer/).
 
 **Không gửi riêng `src-tauri/target/release/flashlab.exe`**: file chạy chính còn cần Node sidecar và thư mục tài nguyên đi kèm. Hãy gửi bộ cài trong thư mục `bundle`, hoặc một gói portable đã được chuẩn bị đầy đủ; dự án hiện chưa có quy trình tạo gói portable riêng.
 
-**Trạng thái hiện tại:** đã có mã Tauri và quy trình build; chưa có bộ cài EXE/MSI được tạo và kiểm thử native trong môi trường phát triển hiện tại vì thiếu Rust/Cargo và thư viện WebView Linux. Tải ZIP mã nguồn từ GitHub không tương đương tải bộ cài. Phần bên dưới hướng dẫn tạo bộ cài trên Windows hoặc GitHub Actions.
+Đã build bộ cài Windows NSIS và kiểm tra EXE khởi động cùng backend SQLite. Tải ZIP mã nguồn từ GitHub không tương đương tải bộ cài. Phần bên dưới hướng dẫn tạo bộ cài trên Windows hoặc GitHub Actions.
 
 Android độc lập/offline chưa được triển khai. Chi tiết phạm vi mobile có trong [hướng dẫn Tauri](docs/tauri.md#android).
 

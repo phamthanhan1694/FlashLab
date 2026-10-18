@@ -6,6 +6,8 @@ FlashLab dùng SQLite ở backend và IndexedDB ở trình duyệt. Cả bản w
 
 File `flashlab.sqlite` nằm trong thư mục được chọn bởi `storage.directory`/`STORAGE_DIR`. Cấu hình mẫu của bản web dùng `data/profiles` tương đối với gốc dự án. Desktop dùng `data/profiles` trong thư mục dữ liệu ứng dụng `com.flashlab.app` (Windows: `%APPDATA%\com.flashlab.app`). API `/api/storage` trả về thư mục, loại database và đường dẫn file thực tế.
 
+Desktop hỏi nơi lưu ở lần mở đầu tiên: chọn một thư mục riêng hoặc dùng mặc định. Thư mục tự chọn chứa trực tiếp `flashlab.sqlite` và `restore-backups`; cấu hình và `startup.log` vẫn nằm trong thư mục dữ liệu ứng dụng của máy. Lựa chọn được nhớ, không hỏi lại hoặc thay kho khi đã có `config.json`. Thư mục phải ghi được; file `flashlab.sqlite` hiện có được giữ nguyên, và file sai định dạng bị từ chối. Hủy thiết lập không tạo database.
+
 - `profiles`: ID, tên và ngày tạo của mỗi hồ sơ; tên chuẩn hóa là duy nhất.
 - `profile_states`: revision và tài liệu JSON chứa học phần, thẻ, tiến độ, lịch sử, cấu hình và ghi chú riêng của từng hồ sơ.
 - `articles`: nội dung bài viết dùng chung, tác giả, chủ sở hữu và revision.

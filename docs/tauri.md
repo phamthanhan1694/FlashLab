@@ -19,11 +19,15 @@ Giữ cấu trúc workspace hiện tại để bản web và desktop dùng cùng
 
 Sau khi build thành công, gửi bộ cài `*-setup.exe` trong `src-tauri/target/release/bundle/nsis/`. Người nhận chạy bộ cài, rồi mở FlashLab từ Start Menu; không cần Node, Rust hoặc mã nguồn. Không gửi riêng file chạy chính `target/release/flashlab.exe` vì còn thiếu backend/Node sidecar và tài nguyên.
 
+Lần mở đầu tiên trên máy chưa có cấu hình, FlashLab hỏi **Chọn thư mục**, **Dùng mặc định** hoặc **Đóng**. Chọn thư mục mở cửa sổ chọn thư mục của hệ điều hành; database `flashlab.sqlite` và các bản dự phòng được lưu trực tiếp trong thư mục đó. Dùng mặc định lưu trong thư mục dữ liệu ứng dụng của tài khoản đang đăng nhập. Hủy cửa sổ chọn thư mục quay về câu hỏi; chọn Đóng thoát mà chưa tạo cấu hình hoặc database.
+
+Ứng dụng kiểm tra quyền ghi và file database hiện có trước khi lưu lựa chọn. Nếu thư mục không dùng được, ứng dụng báo lỗi để chọn lại. Lựa chọn nằm trong `config.json` riêng của máy và được nhớ cho lần mở sau; bản cập nhật giữ cấu hình hiện có và tiếp tục dùng kho cũ. Chọn thư mục đã chứa database FlashLab cho phép dùng lại dữ liệu ở đó. Khôi phục bản sao lưu `.sqlite` vẫn thực hiện trong Cài đặt sau khi mở ứng dụng.
+
 MSI là lựa chọn bộ cài khác, tạo bằng `npm run desktop:build -- --bundles msi` trên Windows. Kết quả nằm ở `src-tauri/target/release/bundle/msi/`. Chỉ cần cài EXE hoặc MSI, không cần cả hai. Workflow Windows hiện chỉ tạo EXE qua NSIS và cung cấp artifact, không tự đăng GitHub Release.
 
 Theo cấu hình Tauri mặc định, nếu máy nhận chưa có WebView2 thì bộ cài tải và cài thành phần này; cần Internet cho bước đó. Sau khi cài đầy đủ, chức năng học desktop dùng được offline. Muốn bộ cài cài đặt hoàn toàn offline cần cấu hình thêm chế độ `offlineInstaller` cho WebView2; hiện chưa bật. Xem [tài liệu bộ cài Windows](https://v2.tauri.app/distribute/windows-installer/).
 
-Hiện chưa có bộ cài native đã được build và kiểm thử trong môi trường phát triển này. Các lệnh bên dưới là quy trình tạo bộ cài; tải ZIP mã nguồn không tạo sẵn EXE/MSI.
+Tải ZIP mã nguồn không tạo sẵn EXE/MSI; cần build bộ cài hoặc tải artifact từ workflow Build desktop đã chạy thành công.
 
 ## Cài công cụ build
 
@@ -77,13 +81,15 @@ Desktop dùng `app_data_dir` của Tauri cho `com.flashlab.app`:
 - Linux: dưới `$XDG_DATA_HOME`, mặc định `~/.local/share`.
 - macOS: dưới `~/Library/Application Support`.
 
-Lần đầu chạy, ứng dụng tạo `config.json` từ cấu hình mẫu bên trong thư mục này. Mặc định hồ sơ lưu tại `data/profiles` **tương đối với thư mục cấu hình desktop**. Có thể sửa `storage.directory` thành thư mục tuyệt đối để chọn kho khác; thoát app trước khi sửa. Đường dẫn thực tế cũng có trong Hướng dẫn → Sao lưu và lưu trữ trong ứng dụng.
+Sau khi chọn nơi lưu ở lần đầu chạy, ứng dụng tạo `config.json` từ cấu hình mẫu bên trong thư mục này. Lựa chọn mặc định lưu hồ sơ tại `data/profiles` **tương đối với thư mục cấu hình desktop**; thư mục tự chọn được ghi bằng đường dẫn tuyệt đối. Có thể sửa `storage.directory` để dùng kho khác; thoát app và sao lưu trước khi sửa, vì đổi đường dẫn không tự chuyển dữ liệu từ kho cũ. Đường dẫn thực tế cũng có trong Hướng dẫn → Sao lưu và lưu trữ trong ứng dụng.
 
 Desktop không đọc `.env` hoặc `flashlab.config.json` riêng của bản web và không tự nhập/chỉnh sửa kho web hiện tại. Để chuyển dữ liệu, chọn Sao lưu hồ sơ hoặc Sao lưu toàn bộ trong Cài đặt của bản web, rồi chọn Khôi phục từ database ở bản desktop và mở file `.sqlite`. Không cần giải nén hoặc ghép file ảnh.
 
 Dữ liệu chính nằm trong `flashlab.sqlite` ở thư mục lưu trữ đã cấu hình. Node sidecar cung cấp SQLite có sẵn trong Node.js; không cần cài thêm database trên máy nhận. JSON cũ được tự nhập và giữ nguyên bản gốc. Trình duyệt/WebView dùng IndexedDB cho dữ liệu chờ đồng bộ. Xem [lưu trữ và sao lưu](storage.md).
 
 Backend chỉ bind `127.0.0.1`, ưu tiên cổng API trong cấu hình desktop và dò cổng kế tiếp khi cổng bị chiếm. Ứng dụng chỉ mở cửa sổ học sau khi backend báo sẵn sàng; backend lỗi sẽ hiện thông báo trên màn hình khởi động. Trang học chạy cùng origin với API nên giữ nguyên đồng bộ, CSV/Excel, ảnh và âm thanh. Các trang HTTP không được cấp quyền gọi lệnh native; không mở quyền shell/file cho JavaScript.
+
+Nếu desktop không khởi động, màn hình chờ hiển thị lỗi backend và đường dẫn `startup.log` trong thư mục dữ liệu ứng dụng. Log ghi đường dẫn runtime/tài nguyên và lỗi từ Node; không xóa database để thử sửa lỗi khởi động. Trên Windows, launcher chuẩn hóa đường dẫn `\\?\` do Tauri trả về trước khi truyền cho Node, tránh lỗi `EISDIR ... lstat 'E:'` trước khi backend đọc cấu hình.
 
 ## Kiểm tra backend đóng gói
 
@@ -93,6 +99,8 @@ Không cần Rust để kiểm tra riêng phần tài nguyên/backend:
 npm run desktop:prepare -- --resources-only
 npm run test:desktop
 ```
+
+Trên Windows, sau khi chuẩn bị tài nguyên và Node sidecar bằng `npm run desktop:prepare`, chạy `cargo test --release --manifest-path src-tauri/Cargo.toml packaged_backend_starts_from_verbatim_windows_paths` để kiểm tra launcher Rust khởi động backend từ đường dẫn Windows có tiền tố `\\?\`, khoảng trắng và Unicode.
 
 Test dùng dữ liệu tạm, kiểm tra phục vụ giao diện/âm thanh, cổng bị chiếm, lưu hồ sơ qua khởi động lại, tạo cấu hình lần đầu và tự dừng khi stdin của tiến trình cha đóng. Đây chưa phải kiểm tra cửa sổ WebView hoặc bộ cài native.
 
