@@ -1,7 +1,7 @@
 node_modules
 **/dist
 package-lock.json
-data
+/data
 
 src-tauri/target
 src-tauri/resources
