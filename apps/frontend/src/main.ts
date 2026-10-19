@@ -7,6 +7,18 @@ import {
 import { reorderItems } from './core/reorder';
 import { gradeTestMeanings } from './features/study/test-grading';
 import {
+  durationSeconds,
+  formatCountdown,
+  studyClock,
+} from './features/study/timer';
+import {
+  timeLimitMarkup,
+  studyWarningMarkup,
+  studyTimerMarkup,
+  studyTimeoutMarkup,
+  sessionLimitMarkup,
+} from './ui/study-time';
+import {
   defaultSpeechRate,
   initializeSpeechSettings,
 } from './ui/speech-settings';
@@ -383,6 +395,9 @@ async function main() {
   ) {
     const c = getCard(deckId, cardId);
     if (!c) return;
+    const outcomeTime = ui.study?.expired
+      ? ui.study.startTime + (ui.study.timeLimitSeconds ?? 0) * 1000
+      : Date.now();
     if (ui.study)
       (ui.study.results ??= []).push({
         front: c.front,
@@ -399,13 +414,13 @@ async function main() {
       reviewCard(
         c,
         correct,
-        Date.now(),
+        outcomeTime,
         data.preferences?.srs ?? defaultSrsPreferences,
         mode,
       ),
     );
     if (mode !== 'test') audio.effect(correct ? 'correct' : 'incorrect');
-    const key = dateKey();
+    const key = dateKey(outcomeTime);
     data.history[key] = (Number(data.history[key]) || 0) + 1;
     if (ui.study) {
       ui.study.correct = (ui.study.correct || 0) + (correct ? 1 : 0);
@@ -417,15 +432,21 @@ async function main() {
     const s = ui.study;
     if (!s || !s.started || s.saved) return;
     if (['flashcards', 'review'].includes(s.mode)) {
-      s.answers = s.pool.length;
-      s.correct = s.pool.filter(
-        (p) => s.remembered[JSON.stringify([p.deckId, p.cardId])],
-      ).length;
+      s.answers = s.expired ? s.flashRated.length : s.pool.length;
+      s.correct = s.pool
+        .filter(
+          (item) =>
+            !s.expired ||
+            s.flashRated.includes(JSON.stringify([item.deckId, item.cardId])),
+        )
+        .filter(
+          (p) => s.remembered[JSON.stringify([p.deckId, p.cardId])],
+        ).length;
     }
     if (!s.answers) return;
     s.saved = true;
     if (['flashcards', 'review'].includes(s.mode)) {
-      const key = dateKey();
+      const key = dateKey(s.endTime || Date.now());
       data.history[key] =
         (Number(data.history[key]) || 0) + s.flashRated.length;
       for (const p of s.pool) {
@@ -437,7 +458,7 @@ async function main() {
             reviewCard(
               c,
               !!s.remembered[cardKey],
-              Date.now(),
+              s.endTime || Date.now(),
               data.preferences?.srs ?? defaultSrsPreferences,
               s.mode,
             ),
@@ -446,13 +467,15 @@ async function main() {
     }
     data.sessions.push({
       id: id(),
-      date: Date.now(),
+      date: s.endTime || Date.now(),
       deckId: s.deckId,
       mode: s.mode,
       deckTitle:
         getDeck(s.deckId)?.title ??
         (s.deckId === 'all' ? 'Tất cả học phần' : 'Học phần đã xóa'),
-      completed: s.finished,
+      completed: s.finished && !s.expired,
+      timeLimitSeconds: s.timeLimitSeconds ?? 0,
+      timedOut: !!s.expired,
       durationSeconds: Math.max(
         0,
         Math.floor(((s.endTime || Date.now()) - s.startTime) / 1000),
@@ -461,7 +484,7 @@ async function main() {
         ? s.pool.flatMap((p) => {
             const c = getCard(p.deckId, p.cardId);
             const key = JSON.stringify([p.deckId, p.cardId]);
-            return c
+            return c && (!s.expired || s.flashRated.includes(key))
               ? [
                   {
                     front: c.front,
@@ -684,6 +707,7 @@ async function main() {
     if (
       ui.page === 'study' &&
       session?.finished &&
+      !session.expired &&
       session.answers > 0 &&
       session.correct === session.answers &&
       !celebratedSessions.has(session)
@@ -928,7 +952,7 @@ async function main() {
   function renderStudySetup(s: Study) {
     const maximum = s.pool.length;
     const type = data.preferences?.study?.testType ?? 'mixed';
-    return `<div class="modal-overlay" data-action="study-setup-overlay"><section class="modal study-setup" role="dialog" aria-modal="true" aria-labelledby="study-setup-title"><div class="modal-head"><div><span class="eyebrow">${modeTitle(s.mode)}</span><h2 id="study-setup-title">Bạn muốn học như thế nào?</h2><p>Chọn trước khi bắt đầu.</p></div><button type="button" class="icon-button" data-action="study-setup-cancel" aria-label="Đóng hộp thoại">${ico('close', 19)}</button></div><form id="study-setup-form" novalidate><div class="form-field"><label for="setup-memory-filter">Chọn từ để học</label><select id="setup-memory-filter"><option value="all">Tất cả từ</option><option value="remembered">Từ đã nhớ</option><option value="unremembered">Từ chưa nhớ</option></select><small class="help-note">Dựa trên dấu đã nhớ của thẻ ghi nhớ.</small><small class="help-note" id="setup-memory-count" role="status"></small></div>${s.mode !== 'match' ? `<div class="form-field"><label for="setup-order">Thứ tự</label><select id="setup-order"><option value="ordered" ${studyOrder(s.mode) === 'ordered' ? 'selected' : ''}>Theo thứ tự</option><option value="random" ${studyOrder(s.mode) === 'random' ? 'selected' : ''}>Ngẫu nhiên</option></select></div>` : ''}<div class="form-field"><label for="setup-count">${s.mode === 'match' ? 'Số cặp ghép' : 'Số câu'}</label><input id="setup-count" type="number" min="1" max="${maximum}" value="${maximum}" required><small class="help-note" id="setup-count-hint">Tối đa ${maximum} thẻ có sẵn</small></div>${s.mode === 'test' ? `<div class="form-field"><label for="setup-test-type">Loại câu hỏi kiểm tra</label><select id="setup-test-type"><option value="mixed" ${type === 'mixed' ? 'selected' : ''}>Trắc nghiệm và tự luận</option><option value="mc" ${type === 'mc' ? 'selected' : ''}>Chỉ trắc nghiệm</option><option value="write" ${type === 'write' ? 'selected' : ''}>Chỉ tự luận</option></select></div><div class="test-answer-settings"><label><input id="setup-multiple-choice" type="checkbox" ${data.preferences?.study?.testMultipleChoice ? 'checked' : ''}><span>Cho phép câu chọn nhiều đáp án</span></label><label><input id="setup-multiple-write" type="checkbox" ${data.preferences?.study?.testMultipleWrite ? 'checked' : ''}><span>Điền nhiều nghĩa bằng các ô riêng</span></label><p class="help-note">Bật để dùng ô chọn nhiều hoặc nút + ở mọi câu điền. Cần trả lời đủ các nghĩa đã lưu; từ chỉ có một nghĩa chỉ cần một đáp án. Bỏ chọn để chấp nhận một nghĩa bất kỳ.</p></div>` : ''}<div class="modal-actions"><button type="button" class="btn outline" data-action="study-setup-cancel">Hủy</button><button class="btn primary" type="submit">${ico('arrow', 16)} Bắt đầu</button></div></form></section></div>`;
+    return `<div class="modal-overlay" data-action="study-setup-overlay"><section class="modal study-setup" role="dialog" aria-modal="true" aria-labelledby="study-setup-title"><div class="modal-head"><div><span class="eyebrow">${modeTitle(s.mode)}</span><h2 id="study-setup-title">Bạn muốn học như thế nào?</h2><p>Chọn trước khi bắt đầu.</p></div><button type="button" class="icon-button" data-action="study-setup-cancel" aria-label="Đóng hộp thoại">${ico('close', 19)}</button></div><form id="study-setup-form" novalidate><div class="form-field"><label for="setup-memory-filter">Chọn từ để học</label><select id="setup-memory-filter"><option value="all">Tất cả từ</option><option value="remembered">Từ đã nhớ</option><option value="unremembered">Từ chưa nhớ</option></select><small class="help-note">Dựa trên dấu đã nhớ của thẻ ghi nhớ.</small><small class="help-note" id="setup-memory-count" role="status"></small></div>${s.mode !== 'match' ? `<div class="form-field"><label for="setup-order">Thứ tự</label><select id="setup-order"><option value="ordered" ${studyOrder(s.mode) === 'ordered' ? 'selected' : ''}>Theo thứ tự</option><option value="random" ${studyOrder(s.mode) === 'random' ? 'selected' : ''}>Ngẫu nhiên</option></select></div>` : ''}<div class="form-field"><label for="setup-count">${s.mode === 'match' ? 'Số cặp ghép' : 'Số câu'}</label><input id="setup-count" type="number" min="1" max="${maximum}" value="${maximum}" required><small class="help-note" id="setup-count-hint">Tối đa ${maximum} thẻ có sẵn</small></div>${s.mode === 'test' ? `<div class="form-field"><label for="setup-test-type">Loại câu hỏi kiểm tra</label><select id="setup-test-type"><option value="mixed" ${type === 'mixed' ? 'selected' : ''}>Trắc nghiệm và tự luận</option><option value="mc" ${type === 'mc' ? 'selected' : ''}>Chỉ trắc nghiệm</option><option value="write" ${type === 'write' ? 'selected' : ''}>Chỉ tự luận</option></select></div><div class="test-answer-settings"><label><input id="setup-multiple-choice" type="checkbox" ${data.preferences?.study?.testMultipleChoice ? 'checked' : ''}><span>Cho phép câu chọn nhiều đáp án</span></label><label><input id="setup-multiple-write" type="checkbox" ${data.preferences?.study?.testMultipleWrite ? 'checked' : ''}><span>Điền nhiều nghĩa bằng các ô riêng</span></label><p class="help-note">Bật để dùng ô chọn nhiều hoặc nút + ở mọi câu điền. Cần trả lời đủ các nghĩa đã lưu; từ chỉ có một nghĩa chỉ cần một đáp án. Bỏ chọn để chấp nhận một nghĩa bất kỳ.</p></div>` : ''}${timeLimitMarkup(data.preferences?.study?.timeLimits?.[s.mode] ?? 0, s.mode === 'test')}<div class="modal-actions"><button type="button" class="btn outline" data-action="study-setup-cancel">Hủy</button><button class="btn primary" type="submit">${ico('arrow', 16)} Bắt đầu</button></div></form></section></div>`;
   }
   function selectedSetupPool(s: Study, filter: MemoryFilter) {
     return s.pool.filter((item) =>
@@ -955,6 +979,19 @@ async function main() {
     translatePage();
   }
   document.addEventListener('change', (event) => {
+    if (
+      event.target instanceof HTMLInputElement &&
+      event.target.id === 'setup-time-enabled'
+    ) {
+      const fields = document.querySelector<HTMLElement>('.study-time-fields');
+      if (fields) {
+        const enabled = event.target.checked;
+        fields.hidden = !enabled;
+        fields
+          .querySelectorAll<HTMLInputElement>('input')
+          .forEach((field) => (field.disabled = !enabled));
+      }
+    }
     if (
       event.target instanceof HTMLSelectElement &&
       event.target.id === 'setup-memory-filter'
@@ -1184,7 +1221,7 @@ async function main() {
     modal(
       'Chi tiết phiên học',
       session.deckTitle ?? getDeck(session.deckId)?.title ?? 'Học phần đã xóa',
-      `<div class="session-summary"><span>${esc(mode)}</span><time data-user-content data-ui-date datetime="${new Date(session.date).toISOString()}">${new Date(session.date).toLocaleString(uiLocale())}</time><strong>${session.correct}/${session.answers} ${['flashcards', 'review'].includes(session.mode) ? 'đã nhớ' : 'đúng'}</strong>${session.durationSeconds !== undefined ? `<span>Thời gian: ${formatTime(session.durationSeconds)}</span>` : ''}${session.completed !== undefined ? `<span>${session.completed ? 'Đã hoàn thành' : 'Đã dừng giữa chừng'}</span>` : ''}</div><div class="session-result-list">${rows.map((r, i) => `<article class="review-row"><div><strong data-user-content>${offset + i + 1}. ${esc(r.front)}</strong><p><span>${['flashcards', 'review'].includes(session.mode) ? 'Đánh giá:' : 'Bạn trả lời:'}</span> ${r.userAnswer === undefined ? '<span>(không ghi lại)</span>' : `<span data-user-content>${esc(r.userAnswer)}</span>`}</p><p><span>Đáp án:</span> <span data-user-content>${esc(r.correctAnswer)}</span></p></div><span class="${r.ok ? 'correct-label' : 'wrong-label'}">${r.assessed === false ? 'Chưa đánh giá' : ['flashcards', 'review'].includes(session.mode) ? (r.ok ? 'Đã nhớ' : 'Chưa nhớ') : r.ok ? '✓ Đúng' : '✕ Sai'}</span></article>`).join('') || '<p class="help-note">Phiên học cũ chỉ lưu tổng điểm, chưa có chi tiết từng câu. Các phiên học mới sẽ lưu câu hỏi, đáp án và câu trả lời.</p>'}</div>${listPagination(results.length, 'session-detail')}`,
+      `<div class="session-summary"><span>${esc(mode)}</span><time data-user-content data-ui-date datetime="${new Date(session.date).toISOString()}">${new Date(session.date).toLocaleString(uiLocale())}</time><strong>${session.correct}/${session.answers} ${['flashcards', 'review'].includes(session.mode) ? 'đã nhớ' : 'đúng'}</strong>${sessionLimitMarkup(session)}${session.durationSeconds !== undefined ? `<span>Thời gian: ${formatTime(session.durationSeconds)}</span>` : ''}${session.completed !== undefined && !session.timedOut ? `<span>${session.completed ? 'Đã hoàn thành' : 'Đã dừng giữa chừng'}</span>` : ''}</div><div class="session-result-list">${rows.map((r, i) => `<article class="review-row"><div><strong data-user-content>${offset + i + 1}. ${esc(r.front)}</strong><p><span>${['flashcards', 'review'].includes(session.mode) ? 'Đánh giá:' : 'Bạn trả lời:'}</span> ${r.userAnswer === undefined ? '<span>(không ghi lại)</span>' : `<span data-user-content>${esc(r.userAnswer)}</span>`}</p><p><span>Đáp án:</span> <span data-user-content>${esc(r.correctAnswer)}</span></p></div><span class="${r.ok ? 'correct-label' : 'wrong-label'}">${r.assessed === false ? 'Chưa đánh giá' : ['flashcards', 'review'].includes(session.mode) ? (r.ok ? 'Đã nhớ' : 'Chưa nhớ') : r.ok ? '✓ Đúng' : '✕ Sai'}</span></article>`).join('') || '<p class="help-note">Phiên học cũ chỉ lưu tổng điểm, chưa có chi tiết từng câu. Các phiên học mới sẽ lưu câu hỏi, đáp án và câu trả lời.</p>'}</div>${listPagination(results.length, 'session-detail')}`,
       'session-detail',
     );
     element('modal-root')
@@ -1203,6 +1240,7 @@ async function main() {
       memoryFilter?: MemoryFilter;
       multipleChoice?: boolean;
       multipleWrite?: boolean;
+      timeLimitSeconds?: number;
     },
   ) {
     cancelAdvance();
@@ -1232,6 +1270,7 @@ async function main() {
     if (options) pool = pool.slice(0, options.count);
     const s: Study = {
       started: !!options,
+      timeLimitSeconds: options?.timeLimitSeconds ?? 0,
       flashRated: [],
       remembered: Object.fromEntries(
         pool.map((p) => [
@@ -1338,7 +1377,7 @@ async function main() {
   }
   function studyTop(s: Study, index: number, total: number) {
     const d = getDeck(s.deckId);
-    return `<div class="study-top"><button class="btn outline study-back" data-action="study-exit" >${ico('back', 18)} <span>${s.deckId === 'all' ? 'Quay về ôn tập' : 'Quay về học phần'}</span></button><div class="study-heading"><h1>${modeTitle(s.mode)}</h1><span class="study-deck-name" ${d ? 'data-user-content' : ''}>${esc(d?.title || 'Tất cả học phần')}</span></div><span class="study-clock">${ico('clock', 16)} <strong data-study-time data-user-content>${formatTime(Math.max(0, Math.floor(((s.endTime || Date.now()) - s.startTime) / 1000)))}</strong></span><div class="study-counter">${s.mode === 'test' ? `${index} / ${total} câu đã xác nhận` : `${total ? clamp(index + 1, 1, total) : 0} / ${total} thẻ`}</div></div><div class="study-progress"><span style="width:${total ? Math.round((index / total) * 100) : 0}%"></span></div>`;
+    return `${studyWarningMarkup(s)}<div class="study-top"><button class="btn outline study-back" data-action="study-exit" >${ico('back', 18)} <span>${s.deckId === 'all' ? 'Quay về ôn tập' : 'Quay về học phần'}</span></button><div class="study-heading"><h1>${modeTitle(s.mode)}</h1><span class="study-deck-name" ${d ? 'data-user-content' : ''}>${esc(d?.title || 'Tất cả học phần')}</span></div>${studyTimerMarkup(s)}<div class="study-counter">${s.mode === 'test' ? `${index} / ${total} câu đã xác nhận` : `${total ? clamp(index + 1, 1, total) : 0} / ${total} thẻ`}</div></div><div class="study-progress"><span style="width:${total ? Math.round((index / total) * 100) : 0}%"></span></div>`;
   }
   function currentItem(s: Study) {
     return s.mode === 'learn' || s.mode === 'write'
@@ -1462,7 +1501,7 @@ async function main() {
         '',
       )}<button type="button" class="btn primary" data-action="test-submit">Nộp bài</button></form></div></div>`;
   }
-  function advanceTest(submit = false) {
+  function advanceTest(submit = false, expired = false) {
     const s = ui.study;
     if (!s || s.mode !== 'test' || s.finished) return;
     cancelAdvance();
@@ -1474,7 +1513,7 @@ async function main() {
     const missing = s.questions
       .map((_, i) => i)
       .filter((i) => !s.testConfirmed?.[i] || !hasTestAnswer(s, i));
-    if (missing.length) {
+    if (missing.length && !expired) {
       const error = element('test-submit-error');
       error.hidden = false;
       error.textContent = `Chưa thể nộp bài. Cần trả lời và xác nhận các câu: ${missing.map((i) => i + 1).join(', ')}.`;
@@ -1495,7 +1534,9 @@ async function main() {
           ? supplied
           : supplied.map((value) => q.choices[Number(value)] ?? '');
       const userAnswer = meanings.join(' ; ');
-      const ok = gradeTestMeanings(c, meanings, !!q.multiple);
+      const ok =
+        (!expired || !!s.testConfirmed?.[i]) &&
+        gradeTestMeanings(c, meanings, !!q.multiple);
       const expected =
         q.type === 'write' || q.multiple
           ? cardDefinitions(c).join(' ; ')
@@ -1540,7 +1581,9 @@ async function main() {
   }
   function renderFinished(s: Study) {
     const total = ['flashcards', 'review'].includes(s.mode)
-        ? s.pool.length
+        ? s.expired
+          ? s.flashRated.length
+          : s.pool.length
         : s.answers,
       percentage = total ? Math.round((s.correct / total) * 100) : 0;
     let text = '';
@@ -1551,7 +1594,7 @@ async function main() {
     } else
       text = `Đã trả lời ${total} lượt · ${s.correct} đúng · ${total - s.correct} chưa đúng`;
 
-    return `<div class="study-area">${studyTop(s, total, total)}<div class="result-banner"><span class="result-emoji">${percentage >= runtimeConfig.study.completionPercent ? '🏆' : percentage >= 50 ? '🎉' : '🌱'}</span><span class="eyebrow">PHIÊN HỌC HOÀN THÀNH</span><h2>Bạn đã hoàn thành!</h2><div class="result-score">${percentage}%</div><p>${text}</p><p class="result-time"><span>Thời gian</span>: <strong data-user-content>${formatTime(Math.max(0, Math.floor((s.endTime - s.startTime) / 1000)))}</strong></p><div class="result-actions"><button class="btn outline" data-action="study-exit">${ico('back', 16)} Về học phần</button><button class="btn primary" data-action="retry-study">${ico('repeat', 16)} Học lại</button></div></div>${
+    return `<div class="study-area">${studyTop(s, total, total)}<div class="result-banner">${studyTimeoutMarkup(s)}<span class="result-emoji">${s.expired ? ico('clock', 32) : percentage >= runtimeConfig.study.completionPercent ? '🏆' : percentage >= 50 ? '🎉' : '🌱'}</span><span class="eyebrow">PHIÊN HỌC HOÀN THÀNH</span><h2>${s.expired ? 'Hết thời gian' : 'Bạn đã hoàn thành!'}</h2><div class="result-score">${percentage}%</div><p>${text}</p><p class="result-time"><span>Thời gian</span>: <strong data-user-content>${formatTime(Math.max(0, Math.floor((s.endTime - s.startTime) / 1000)))}</strong></p><div class="result-actions"><button class="btn outline" data-action="study-exit">${ico('back', 16)} Về học phần</button><button class="btn primary" data-action="retry-study">${ico('repeat', 16)} Học lại</button></div></div>${
       s.testResults
         ? `<details class="result-review"><summary>Chi tiết đáp án (${s.testResults.length} câu)</summary>${pageRows(
             s.testResults,
@@ -1573,19 +1616,28 @@ async function main() {
     if (!s || s.finished) return;
     cancelAdvance();
     if (['flashcards', 'review'].includes(s.mode)) {
-      s.answers = s.pool.length;
-      s.correct = s.pool.filter(
-        (p) => s.remembered[JSON.stringify([p.deckId, p.cardId])],
-      ).length;
+      s.answers = s.expired ? s.flashRated.length : s.pool.length;
+      s.correct = s.pool
+        .filter(
+          (item) =>
+            !s.expired ||
+            s.flashRated.includes(JSON.stringify([item.deckId, item.cardId])),
+        )
+        .filter(
+          (p) => s.remembered[JSON.stringify([p.deckId, p.cardId])],
+        ).length;
     }
     audio.effect(
-      s.answers &&
+      !s.expired &&
+        s.answers &&
         (s.correct / s.answers) * 100 >= runtimeConfig.study.completionPercent
         ? 'completed'
         : 'keep-trying',
     );
     s.finished = true;
-    s.endTime = Date.now();
+    s.endTime = s.expired
+      ? s.startTime + (s.timeLimitSeconds ?? 0) * 1000
+      : Date.now();
     if (matchTimer) {
       clearInterval(matchTimer);
       matchTimer = null;
@@ -2149,23 +2201,76 @@ async function main() {
       'input,textarea,select,button,summary,[role="separator"],[contenteditable="true"]',
     );
   }
+  function expireStudyIfNeeded() {
+    const study = ui.study;
+    if (
+      ui.page !== 'study' ||
+      !study?.started ||
+      study.finished ||
+      study.expired ||
+      !studyClock(study.startTime, study.timeLimitSeconds).expired
+    )
+      return false;
+    study.expired = true;
+    cancelAdvance();
+    if (study.mode === 'test') advanceTest(true, true);
+    else finishStudy();
+    return true;
+  }
+  // Check before accepting input as well as on timer ticks, including a throttled/hidden tab.
+  for (const type of ['click', 'keydown', 'input', 'change', 'submit']) {
+    document.addEventListener(
+      type,
+      (event) => {
+        if (expireStudyIfNeeded()) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        }
+      },
+      true,
+    );
+  }
   function startMatchTimer() {
     if (matchTimer) return;
-    matchTimer = setInterval(() => {
+    const tick = () => {
       if (!ui.study || ui.page !== 'study' || ui.study.finished) {
         if (matchTimer !== null) clearInterval(matchTimer);
         matchTimer = null;
         return;
       }
+      if (expireStudyIfNeeded()) return;
+      const study = ui.study;
+      const clock = studyClock(study.startTime, study.timeLimitSeconds);
       const elapsed = formatTime(
         Math.floor((Date.now() - ui.study.startTime) / 1000),
       );
       document
-        .querySelectorAll('[data-study-time], #test-time, #match-time')
+        .querySelectorAll('[data-study-time], #test-time')
         .forEach((el) => {
-          el.textContent = elapsed;
+          el.textContent = clock.limited
+            ? formatCountdown(clock.remainingSeconds)
+            : elapsed;
         });
-    }, 500);
+      const matchClock = document.getElementById('match-time');
+      if (matchClock) matchClock.textContent = elapsed;
+      document
+        .querySelectorAll<HTMLElement>('.study-deadline-warning')
+        .forEach((node) => (node.hidden = !clock.warning));
+      document
+        .querySelectorAll('[data-time-remaining]')
+        .forEach(
+          (node) =>
+            (node.textContent = formatCountdown(clock.remainingSeconds)),
+        );
+      document
+        .querySelector('.test-sticky-header')
+        ?.classList.toggle('is-time-warning', clock.warning);
+      document
+        .querySelector('.study-clock')
+        ?.classList.toggle('is-time-warning', clock.warning);
+    };
+    matchTimer = setInterval(tick, 250);
+    tick();
   }
   // Handle navigation and clicks through a single delegated listener.
   document.addEventListener('pointerdown', (event) => {
@@ -2819,6 +2924,23 @@ async function main() {
               'mixed' | 'mc' | 'write')
           : 'mixed';
       const settings = (data.preferences!.study ??= {});
+      let timeLimitSeconds = 0;
+      if (input('setup-time-enabled').checked) {
+        const seconds = durationSeconds(
+          Number(input('setup-time-hours').value),
+          Number(input('setup-time-minutes').value),
+          Number(input('setup-time-seconds').value),
+        );
+        if (!seconds) {
+          showFieldError(
+            input('setup-time-seconds'),
+            'Nhập thời gian lớn hơn 0; giờ 0–99, phút và giây 0–59.',
+          );
+          return;
+        }
+        timeLimitSeconds = seconds;
+      }
+      (settings.timeLimits ??= {})[s.mode] = timeLimitSeconds;
       settings.orders ??= {};
       settings.orders[s.mode] = order;
       const multipleChoice =
@@ -2839,6 +2961,7 @@ async function main() {
         memoryFilter,
         multipleChoice,
         multipleWrite,
+        timeLimitSeconds,
       });
       audio.start(s.mode);
       go('study', s.deckId, s.mode);

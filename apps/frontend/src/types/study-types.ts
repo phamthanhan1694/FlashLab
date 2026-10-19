@@ -6,6 +6,8 @@ export interface Item {
 }
 export interface Study {
   started: boolean;
+  timeLimitSeconds?: number;
+  expired?: boolean;
   results?: SessionResult[];
   remembered: Record<string, boolean>;
   flashRated: string[];

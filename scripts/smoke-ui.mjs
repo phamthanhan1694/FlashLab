@@ -311,6 +311,20 @@ test('production frontend: initialize, create deck/card, render all study modes 
         document.getElementById('setup-multiple-write').checked =
           !!options.multipleWrite;
       }
+      if (options.limit !== undefined) {
+        const enabled = document.getElementById('setup-time-enabled');
+        enabled.checked = options.limit > 0;
+        enabled.dispatchEvent(new window.Event('change', { bubbles: true }));
+        document.getElementById('setup-time-hours').value = String(
+          Math.floor(options.limit / 3600),
+        );
+        document.getElementById('setup-time-minutes').value = String(
+          Math.floor(options.limit / 60) % 60,
+        );
+        document.getElementById('setup-time-seconds').value = String(
+          options.limit % 60,
+        );
+      }
       submit('#study-setup-form');
       await waitFor(
         () => document.querySelector('.study-area'),
@@ -3266,5 +3280,149 @@ test('production frontend: initialize, create deck/card, render all study modes 
         second,
       );
     }
+  }
+  // Exercise real deadlines in all six modes with an isolated deck.
+  click('[data-nav="home"]');
+  await waitFor(() => document.querySelector('.welcome'), 'timed fixture home');
+  click('[data-action="create-deck"]');
+  document.getElementById('deck-title').value = 'Timed fixture';
+  submit('#modal-form');
+  await waitFor(
+    () => document.querySelector('[data-action="add-card"]'),
+    'timed fixture deck',
+  );
+  for (let n = 0; n < 3; n++) {
+    click('[data-action="add-card"]');
+    document.getElementById('card-front').value = 'Timed term ' + n;
+    document.getElementById('card-back').value = 'Timed answer ' + n;
+    submit('#modal-form');
+    await waitFor(
+      () => !document.querySelector('#modal-form'),
+      'timed card saved',
+    );
+  }
+  await waitFor(
+    () =>
+      snapshot.data.decks.some(
+        (deck) => deck.title === 'Timed fixture' && deck.cards.length === 3,
+      ),
+    'timed cards persisted',
+  );
+  const timedDeck = () =>
+    snapshot.data.decks.find((deck) => deck.title === 'Timed fixture');
+  for (const mode of [
+    'review',
+    'flashcards',
+    'learn',
+    'write',
+    'match',
+    'test',
+  ]) {
+    const before = structuredClone(timedDeck().cards);
+    await startStudy(mode, {
+      count: 3,
+      order: 'ordered',
+      type: 'write',
+      limit: mode === 'test' ? 6 : 3,
+    });
+    assert.match(
+      document.querySelector('[data-study-time]').textContent,
+      /^00:00:0[36]$/,
+    );
+    assert.equal(
+      document.querySelector('.study-deadline-warning').hidden,
+      true,
+    );
+    if (mode === 'flashcards') click('[data-outcome="true"]');
+    if (mode === 'test') {
+      for (let n = 0; n < 2; n++) {
+        const field = document.querySelector(
+          '#test-question-' + n + ' .test-input',
+        );
+        field.value = before[n].back;
+        field.dispatchEvent(new window.Event('input', { bubbles: true }));
+      }
+      click('[data-test-confirm="0"]');
+      assert.equal(
+        document
+          .querySelector('[data-test-confirm="1"]')
+          .getAttribute('aria-pressed'),
+        'false',
+      );
+    }
+    await waitFor(
+      () => !document.querySelector('.study-deadline-warning')?.hidden,
+      mode + ' final-third warning',
+    );
+    if (mode === 'test') {
+      assert.ok(document.querySelector('.test-sticky-header.is-time-warning'));
+      click('#settings > summary');
+      assert.equal(document.getElementById('settings').open, true);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    assert.equal(
+      document.querySelector('.study-deadline-warning').hidden,
+      false,
+      'warning remains visible',
+    );
+    await waitFor(
+      () => document.querySelector('.result-banner'),
+      mode + ' automatic timeout',
+    );
+    if (mode === 'test') {
+      assert.equal(
+        document.getElementById('settings').open,
+        true,
+        'settings stays open while time runs',
+      );
+      click('#settings-close');
+      assert.equal(document.querySelector('.result-score').textContent, '33%');
+      await waitFor(
+        () =>
+          snapshot.data.sessions.at(-1)?.mode === 'test' &&
+          snapshot.data.sessions.at(-1)?.timedOut,
+        'timeout session saved',
+      );
+      const session = snapshot.data.sessions.at(-1);
+      assert.equal(session.answers, 3);
+      assert.equal(
+        session.correct,
+        1,
+        'an unconfirmed correct typed answer is still incorrect',
+      );
+      assert.equal(session.timeLimitSeconds, 6);
+      assert.equal(session.completed, false);
+    } else if (mode === 'flashcards') {
+      await waitFor(
+        () =>
+          snapshot.data.sessions.at(-1)?.mode === 'flashcards' &&
+          snapshot.data.sessions.at(-1)?.timedOut,
+        'partial flashcard session saved',
+      );
+      assert.equal(snapshot.data.sessions.at(-1).answers, 1);
+      assert.equal(snapshot.data.sessions.at(-1).results.length, 1);
+      assert.deepEqual(
+        timedDeck().cards.slice(1),
+        before.slice(1),
+        'unrated cards are untouched',
+      );
+    } else {
+      assert.deepEqual(
+        timedDeck().cards,
+        before,
+        'unanswered non-test cards are not penalized',
+      );
+    }
+    await waitFor(
+      () =>
+        snapshot.data.preferences.study.timeLimits[mode] ===
+        (mode === 'test' ? 6 : 3),
+      'mode duration saved',
+    );
+    click('[data-action="study-exit"]');
+    await waitFor(
+      () => document.querySelector('[data-action="add-card"]'),
+      'leave expired session',
+    );
   }
 });

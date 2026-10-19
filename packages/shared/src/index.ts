@@ -114,6 +114,8 @@ export const sessionSchema = z
     deckTitle: z.string().max(120).optional(),
     durationSeconds: z.number().int().nonnegative().optional(),
     completed: z.boolean().optional(),
+    timeLimitSeconds: z.number().int().min(0).max(359999).optional(),
+    timedOut: z.boolean().optional(),
     results: z.array(sessionResultSchema).max(100000).optional(),
     answers: z.number().int().nonnegative(),
     correct: z.number().int().nonnegative(),
@@ -146,6 +148,9 @@ export const audioPreferencesSchema = z.object({
   musicVolume: z.number().min(0).max(1).default(1),
 });
 export const studyPreferencesSchema = z.object({
+  timeLimits: z
+    .record(modeSchema, z.number().int().min(0).max(359999))
+    .optional(),
   orders: z.record(modeSchema, z.enum(['ordered', 'random'])).optional(),
   testType: z.enum(['mixed', 'mc', 'write']).optional(),
   testMultipleChoice: z.boolean().optional(),

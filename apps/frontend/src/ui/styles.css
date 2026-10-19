@@ -7616,6 +7616,62 @@ html {
 .test-sticky-header .study-progress {
   margin-bottom: 0;
 }
+.study-time-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-block: 12px;
+}
+.study-time-fields[hidden],
+.study-deadline-warning[hidden] {
+  display: none;
+}
+.study-time-settings {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  margin-block: 16px;
+  min-width: 0;
+}
+.study-time-settings legend {
+  padding-inline: 6px;
+  font-weight: 650;
+}
+.study-deadline-warning {
+  position: sticky;
+  top: 0;
+  z-index: 26;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  border: 1px solid var(--red);
+  border-radius: 12px;
+  background: var(--soft-red);
+  color: var(--red);
+  font-weight: 650;
+}
+.study-deadline-warning strong {
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+}
+.test-sticky-header.is-time-warning {
+  background: var(--soft-red);
+  border: 1px solid var(--red);
+  border-radius: 12px;
+  padding: 12px;
+}
+.test-sticky-header.is-time-warning .study-progress {
+  background: var(--line);
+}
+.test-sticky-header.is-time-warning .study-progress > span {
+  background: var(--red);
+}
+.study-clock.is-time-warning {
+  color: var(--red);
+}
 .test-study-area .test-layout {
   align-items: start;
 }

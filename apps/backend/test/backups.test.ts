@@ -13,12 +13,20 @@ const body = stateSchema.parse({
   version: 2,
   preferences: {
     theme: 'dark',
-    language: 'en',
+    language: 'ja',
     avatar: 'owl',
     tileSize: 'large',
     speechRate: 0.8,
     srs: { intervals: [2, 4, 8, 16, 32, 64], retryMinutes: 8 },
     study: {
+      timeLimits: {
+        flashcards: 0,
+        learn: 3661,
+        write: 65,
+        test: 90,
+        match: 120,
+        review: 359999,
+      },
       orders: { test: 'random' },
       testType: 'mixed',
       testMultipleChoice: true,
@@ -92,6 +100,8 @@ const body = stateSchema.parse({
       date: 3,
       durationSeconds: 45,
       completed: true,
+      timeLimitSeconds: 90,
+      timedOut: false,
       answers: 2,
       correct: 1,
       results: [

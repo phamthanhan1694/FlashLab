@@ -890,6 +890,14 @@ test('language, per-mode orders, test types and matching count persist per user'
   data.preferences = preferencesSchema.parse({
     language: 'en',
     study: {
+      timeLimits: {
+        flashcards: 0,
+        learn: 3661,
+        write: 65,
+        test: 90,
+        match: 120,
+        review: 359999,
+      },
       orders: { flashcards: 'ordered', learn: 'random', test: 'ordered' },
       testType: 'mixed',
       testCount: 16,
