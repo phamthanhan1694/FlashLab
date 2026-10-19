@@ -8,6 +8,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
 import { DatabaseSync } from 'node:sqlite';
+import { Client } from '@modelcontextprotocol/client';
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 
 // Exercise the production entry point over real HTTP using isolated runtime data.
 test('production server serves frontend assets and persists API data', async (t) => {
@@ -118,6 +120,25 @@ test('production server serves frontend assets and persists API data', async (t)
   assert.equal((await (await fetch(base + '/api/state')).json()).revision, 1);
   const profiles = await (await fetch(base + '/api/profiles')).json();
   assert.equal(profiles[0].id, 'default');
+  const mcpConfig = await (
+    await fetch(base + '/api/profiles/default/mcp-config')
+  ).json();
+  const mcp = new Client({ name: 'production-http-smoke', version: '1.0.0' });
+  try {
+    await mcp.connect(
+      new StdioClientTransport({
+        ...mcpConfig.mcpServers.flashlab,
+        cwd: tmpdir(),
+        stderr: 'pipe',
+      }),
+    );
+    assert.equal((await mcp.listTools()).tools.length, 6);
+    const current = await mcp.callTool({ name: 'get_profile', arguments: {} });
+    assert.equal(current.structuredContent.revision, 1);
+    assert.equal(current.structuredContent.profile.id, 'default');
+  } finally {
+    await mcp.close();
+  }
   const created = await fetch(base + '/api/profiles', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

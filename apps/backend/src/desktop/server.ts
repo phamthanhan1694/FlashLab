@@ -2,6 +2,8 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { buildApp } from '../http/app.js';
 import { loadConfig, publicConfig } from '../../../../scripts/config.mjs';
+import { startMcpStdio } from '../mcp/stdio.js';
+import { fileURLToPath } from 'node:url';
 
 // This entry point owns a private loopback server; it never uses the web .env or data store.
 async function start() {
@@ -29,9 +31,20 @@ async function start() {
   const config = loadConfig();
   const relativeToConfig = (path: string) =>
     isAbsolute(path) ? path : resolve(dirname(configPath), path);
-  const app = buildApp({
+  const storage = {
     dataFile: relativeToConfig(config.storage.legacyDataFile),
     storageDir: relativeToConfig(config.storage.directory),
+  };
+  if (process.argv[4] === '--mcp') {
+    await startMcpStdio(storage, process.argv.slice(5));
+    return;
+  }
+  const app = buildApp({
+    ...storage,
+    mcpLaunch: {
+      command: process.execPath,
+      args: [fileURLToPath(import.meta.url), resourceDir, appDataDir, '--mcp'],
+    },
     runtimeConfig: publicConfig(config),
     staticRoot: join(resourceDir, 'frontend'),
     logger: false,

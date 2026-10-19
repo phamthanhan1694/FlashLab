@@ -14,6 +14,7 @@ import {
 } from '@flashlab/shared';
 import { ConflictError } from '../storage/store.js';
 import { Profiles } from '../storage/profiles.js';
+import type { McpLaunch } from '../mcp/stdio.js';
 import {
   DatabaseBackups,
   BackupError,
@@ -27,12 +28,42 @@ export function buildApp(options: {
   runtimeConfig?: PublicConfig;
   staticRoot?: string;
   logger?: boolean;
+  mcpLaunch?: McpLaunch;
 }) {
   const app = Fastify({
     logger: options.logger ?? false,
     bodyLimit: 20_000_000,
   });
   const profiles = new Profiles(options.dataFile, options.storageDir);
+  app.get<{ Params: { id: string }; Querystring: { writes?: string } }>(
+    '/api/profiles/:id/mcp-config',
+    async (request, reply) => {
+      if (!options.mcpLaunch)
+        return reply.code(503).send({
+          error: 'MCP launch configuration is unavailable in this runtime.',
+        });
+      const parsedId = profileIdSchema.safeParse(request.params.id);
+      if (!parsedId.success)
+        return reply.code(400).send({ error: 'Invalid profile ID.' });
+      const id = parsedId.data;
+      await profiles.read(id);
+      if (
+        request.query.writes !== undefined &&
+        !['true', 'false'].includes(request.query.writes)
+      )
+        return reply.code(400).send({ error: 'Invalid write permission.' });
+      const config = {
+        command: options.mcpLaunch.command,
+        args: [
+          ...options.mcpLaunch.args,
+          '--profile',
+          id,
+          ...(request.query.writes === 'true' ? ['--allow-writes'] : []),
+        ],
+      };
+      return { mcpServers: { flashlab: config } };
+    },
+  );
   const blog = new BlogStore(join(profiles.root, 'blog'), profiles.database);
   app.addHook('onClose', async () => profiles.close());
   async function blogOwner(header: unknown) {

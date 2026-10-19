@@ -15,6 +15,7 @@
     "typecheck": "npm run build -w @flashlab/shared && npm run typecheck --workspaces --if-present",
     "build": "node scripts/clean.mjs && npm run build -w @flashlab/shared && npm run build -w @flashlab/frontend && npm run build -w @flashlab/backend",
     "start": "node --env-file-if-exists=.env scripts/start.mjs",
+    "mcp": "node apps/backend/dist/mcp/cli.js",
     "test": "npm run build -w @flashlab/shared && npm run test --workspaces --if-present",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

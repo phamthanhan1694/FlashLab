@@ -18,6 +18,24 @@ if (
 )
   throw new Error('Cổng API phải từ 1 đến 65535.');
 const app = buildApp({
+  mcpLaunch: {
+    command: process.execPath,
+    args: [
+      ...(import.meta.url.endsWith('.ts')
+        ? ['--import', import.meta.resolve('tsx')]
+        : []),
+      fileURLToPath(
+        new URL(
+          `./mcp/cli.${import.meta.url.endsWith('.ts') ? 'ts' : 'js'}`,
+          import.meta.url,
+        ),
+      ),
+      '--storage-dir',
+      storagePath(process.env.STORAGE_DIR ?? config.storage.directory),
+      '--legacy-file',
+      storagePath(process.env.DATA_FILE ?? config.storage.legacyDataFile),
+    ],
+  },
   dataFile: process.env.DATA_FILE
     ? storagePath(process.env.DATA_FILE)
     : storagePath(config.storage.legacyDataFile),

@@ -8,6 +8,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
+import { Client } from '@modelcontextprotocol/client';
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 
 const resources = fileURLToPath(
   new URL('../src-tauri/resources/', import.meta.url),
@@ -62,6 +64,98 @@ async function stop(child) {
     'closing the parent stdin shuts down the backend cleanly',
   );
 }
+
+test('packaged desktop MCP uses the selected data folder, works without the app window and preserves full card content', async (t) => {
+  const directory = await mkdtemp(
+    join(tmpdir(), 'FlashLab MCP desktop tiếng Việt '),
+  );
+  const running = await launch(directory);
+  let client;
+  t.after(async () => {
+    await client?.close();
+    await stop(running.child);
+    await rm(directory, { recursive: true, force: true });
+  });
+  const created = await fetch(`${running.base}/api/profiles`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: 'MCP desktop' }),
+  });
+  const profile = await created.json();
+  const response = await fetch(
+    `${running.base}/api/profiles/${profile.id}/mcp-config?writes=true`,
+  );
+  assert.equal(response.status, 200);
+  const config = await response.json();
+  assert.ok(config.mcpServers.flashlab.args.includes('--mcp'));
+  assert.ok(config.mcpServers.flashlab.args.includes(directory));
+  await stop(running.child);
+  const transport = new StdioClientTransport({
+    ...config.mcpServers.flashlab,
+    cwd: tmpdir(),
+    stderr: 'pipe',
+    env: {
+      ...process.env,
+      FLASHLAB_CONFIG: '/ignore-this.json',
+      STORAGE_DIR: '/ignore-this-data',
+    },
+  });
+  let errors = '';
+  transport.stderr?.on('data', (chunk) => {
+    errors += chunk;
+  });
+  client = new Client({ name: 'desktop-smoke', version: '1.0.0' });
+  await client.connect(transport);
+  assert.equal((await client.listTools()).tools.length, 12, errors);
+  const deckResult = await client.callTool({
+    name: 'create_deck',
+    arguments: { revision: 1, title: 'Installed MCP' },
+  });
+  assert.equal(deckResult.isError, undefined, JSON.stringify(deckResult));
+  const deck = deckResult.structuredContent.deck;
+  const image = 'data:image/png;base64,aGVsbG8=';
+  const cards = await client.callTool({
+    name: 'add_cards',
+    arguments: {
+      revision: 2,
+      deckId: deck.id,
+      cards: [
+        {
+          front: 'bank',
+          back: 'ngân hàng',
+          definitions: [{ meaning: 'nghiêng', partOfSpeech: 'Verb' }],
+          notes: 'Full content',
+          image,
+        },
+      ],
+    },
+  });
+  assert.equal(cards.isError, undefined, JSON.stringify(cards));
+  const full = await client.callTool({
+    name: 'get_card',
+    arguments: {
+      deckId: deck.id,
+      cardId: cards.structuredContent.addedCardIds[0],
+      includeImage: true,
+    },
+  });
+  assert.equal(full.structuredContent.card.image, image);
+  assert.equal(full.structuredContent.card.definitions[0].meaning, 'nghiêng');
+  await client.close();
+  const db = new DatabaseSync(
+    join(directory, 'data', 'profiles', 'flashlab.sqlite'),
+    { readOnly: true },
+  );
+  try {
+    const row = db
+      .prepare('SELECT revision, data FROM profile_states WHERE profile_id = ?')
+      .get(profile.id);
+    assert.equal(row.revision, 3);
+    assert.equal(JSON.parse(row.data).decks[0].cards[0].notes, 'Full content');
+  } finally {
+    db.close();
+  }
+});
 
 test('bundled desktop backend serves assets, saves private profiles, skips occupied ports and stops with its parent', async (t) => {
   await access(join(resources, 'backend.mjs'));

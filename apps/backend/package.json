@@ -13,10 +13,14 @@
   "dependencies": {
     "@fastify/static": "^10.1.6",
     "@flashlab/shared": "1.0.0",
+    "@modelcontextprotocol/server": "^2.3.1",
     "fastify": "^5.6.2",
-    "fflate": "^0.8.3"
+    "fflate": "^0.8.3",
+    "zod": "^3.25.76",
+    "zod-mcp": "npm:zod@^4.6.7"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "^2.3.1",
     "@types/node": "^22.18.0",
     "tsx": "^4.20.6"
   }
