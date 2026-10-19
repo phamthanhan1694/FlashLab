@@ -174,12 +174,14 @@ export const defaultSrsPreferences: SrsPreferences = {
   intervals: [1, 3, 7, 14, 30, 60],
   retryMinutes: 5,
 };
+export const uiLanguages = ['vi', 'en', 'ko', 'zh', 'ja'] as const;
+export type UiLanguage = (typeof uiLanguages)[number];
 export const preferencesSchema = z.object({
   tileSize: z.enum(['small', 'medium', 'large']).optional(),
   speechRate: z.number().min(0.5).max(1.5).optional(),
   srs: srsPreferencesSchema.optional(),
   avatar: z.enum(avatarIds).optional(),
-  language: z.enum(['vi', 'en']).optional(),
+  language: z.enum(uiLanguages).optional(),
   study: studyPreferencesSchema.optional(),
   theme: z.enum(['system', 'light', 'dark']).default('system'),
   audio: audioPreferencesSchema.default({}),

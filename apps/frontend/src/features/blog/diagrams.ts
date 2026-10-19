@@ -205,9 +205,11 @@ export function mountDiagram(
   title.append(codeBlockToolbar(languageName, source));
   const output = document.createElement('div');
   output.className = 'markdown-diagram-output';
+  output.dataset.markdownUiSource = 'Đang vẽ sơ đồ…';
   output.textContent = translateText('Đang vẽ sơ đồ…');
   const details = document.createElement('details');
   const summary = document.createElement('summary');
+  summary.dataset.markdownUiSource = 'Mã sơ đồ';
   summary.textContent = translateText('Mã sơ đồ');
   details.append(summary);
   pre.replaceWith(figure);
@@ -224,6 +226,7 @@ export function mountDiagram(
     releaseImage();
     output.dataset.diagramTheme = dark ? 'dark' : 'light';
     output.classList.remove('diagram-error');
+    output.dataset.markdownUiSource = 'Đang vẽ sơ đồ…';
     output.textContent = translateText('Đang vẽ sơ đồ…');
     void renderer(language, source, dark)
       .then((svg) => {
@@ -233,21 +236,27 @@ export function mountDiagram(
           new Blob([svg], { type: 'image/svg+xml' }),
         );
         imageUrl = url;
-        image.alt = translateText('Sơ đồ') + ` ${languageName}`;
+        image.alt = languageName;
         image.onload = image.onerror = () => {
           URL.revokeObjectURL(url);
           if (imageUrl === url) imageUrl = undefined;
         };
         image.src = url;
+        delete output.dataset.markdownUiSource;
         output.replaceChildren(image);
       })
       .catch((error) => {
         if (!figure.isConnected || current !== generation) return;
         output.classList.add('diagram-error');
-        output.textContent =
-          translateText('Không vẽ được sơ đồ. Kiểm tra cú pháp bên dưới.') +
-          ' ' +
-          (error instanceof Error ? error.message : '');
+        delete output.dataset.markdownUiSource;
+        const message = document.createElement('span');
+        message.dataset.markdownUiSource =
+          'Không vẽ được sơ đồ. Kiểm tra cú pháp bên dưới.';
+        message.textContent = translateText(message.dataset.markdownUiSource);
+        const detail = document.createElement('span');
+        detail.textContent =
+          ' ' + (error instanceof Error ? error.message : '');
+        output.replaceChildren(message, detail);
         details.open = true;
       });
   };

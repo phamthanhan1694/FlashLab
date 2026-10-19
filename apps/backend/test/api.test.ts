@@ -884,7 +884,7 @@ test('master and eight sound mixer preferences persist without changing legacy d
 });
 
 test('language, per-mode orders, test types and matching count persist per user', async (t) => {
-  const { app } = await fixture(t);
+  const { app, dataFile } = await fixture(t);
   const data = structuredClone(state);
   const { preferencesSchema } = await import('@flashlab/shared');
   data.preferences = preferencesSchema.parse({
@@ -919,6 +919,27 @@ test('language, per-mode orders, test types and matching count persist per user'
     false,
   );
   assert.equal(preferencesSchema.safeParse({ language: 'fr' }).success, false);
+  let revision = 1;
+  for (const language of ['vi', 'en', 'ko', 'zh', 'ja'] as const) {
+    data.preferences!.language = language;
+    const saved = await app.inject({
+      method: 'PUT',
+      url: '/api/state',
+      payload: { revision, data },
+    });
+    assert.equal(saved.statusCode, 200, language);
+    revision = saved.json().revision;
+    assert.equal(
+      (await app.inject('/api/state')).json().data.preferences.language,
+      language,
+    );
+  }
+  await app.close();
+  const reopened = buildApp({ dataFile });
+  assert.equal(
+    (await reopened.inject('/api/state')).json().data.preferences.language,
+    'ja',
+  );
 });
 
 test('classes persist in user snapshots and ZIP; dangling or duplicate memberships are rejected', async (t) => {

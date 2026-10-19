@@ -21,6 +21,35 @@ const config = {
   ],
   retryMinutes: 10,
 };
+
+test('partial progress survives days and schedules a correct answer from its resulting level, while overdue cards stay due', () => {
+  const now = new Date(2026, 9, 19, 23, 59).getTime();
+  const card = cardSchema.parse({
+    id: 'partial',
+    front: 'book',
+    back: 'sách',
+    level: 3,
+    masteryProgress: {
+      correct: 2,
+      modes: ['learn'],
+      testCorrect: 0,
+      modeCorrect: { learn: 2 },
+    },
+  });
+  const answered = reviewCard(card, true, now, undefined, 'write');
+  assert.equal(answered.level, 3);
+  assert.equal(answered.masteryProgress?.correct, 3);
+  assert.equal(answered.due, now + 7 * 86400000);
+  const deck = deckSchema.parse({
+    id: 'deck',
+    title: 'Partial',
+    created: 1,
+    cards: [answered],
+  });
+  const dayAfterDue = answered.due + 86400000;
+  assert.equal(reviewSchedule([deck], dayAfterDue).due[0].card.id, 'partial');
+  assert.equal(deck.cards[0].masteryProgress?.correct, 3);
+});
 test('custom SRS intervals affect correct and incorrect answers without dropping metadata', () => {
   const now = new Date(2026, 9, 14, 10).getTime();
   let card = cardSchema.parse({

@@ -5,12 +5,14 @@ import {
 } from '../features/profiles/backup';
 import type { Profile } from '@flashlab/shared';
 import { notify } from './feedback';
+import { initializeMcpSettings } from './mcp-settings';
 
 export function initializeSettings(
   profile: Profile,
   flush: () => Promise<void>,
   prepareRestore: () => Promise<void | boolean> = flush,
 ) {
+  initializeMcpSettings(profile, flush);
   const root = document.getElementById('settings') as HTMLDetailsElement;
   const trigger = root.querySelector('summary')!;
   const close = (focus = false) => {
@@ -38,8 +40,8 @@ export function initializeSettings(
     }
   });
   root
-    .querySelector('[data-help-link]')
-    ?.addEventListener('click', () => close());
+    .querySelectorAll('[data-help-link]')
+    .forEach((link) => link.addEventListener('click', () => close()));
   const button = document.getElementById(
     'settings-export',
   ) as HTMLButtonElement;

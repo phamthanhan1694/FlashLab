@@ -65,7 +65,7 @@ import {
 } from './ui/feedback';
 import { initializeTheme } from './ui/theme';
 import { initializeSettings } from './ui/settings';
-import { initializeLanguage, translatePage } from './core/i18n';
+import { initializeLanguage, translatePage, uiLocale } from './core/i18n';
 import {
   activityHeatmap,
   initializeActivityTooltip,
@@ -524,6 +524,14 @@ async function main() {
       deck.lastOpened = Date.now();
       save();
     }
+    if (parts[0] === 'home' && parts[1] === 'guide') {
+      history.replaceState(
+        null,
+        '',
+        `#/docs/${encodeURIComponent(parts[2] || 'start')}`,
+      );
+      parts.splice(0, parts.length, 'docs', parts[2] || 'start');
+    }
     const page = parts[0] === 'stats' ? 'home' : parts[0] || 'home';
     if (parts[0] === 'stats') history.replaceState(null, '', '#/');
     if (page === 'deck' && getDeck(parts[1])) {
@@ -558,7 +566,15 @@ async function main() {
         );
       } else ui.page = 'study';
     } else if (
-      ['library', 'review', 'home', 'classes', 'blog', 'notes'].includes(page)
+      [
+        'library',
+        'review',
+        'home',
+        'classes',
+        'blog',
+        'notes',
+        'docs',
+      ].includes(page)
     ) {
       ui.page = page;
       ui.classId = page === 'classes' ? (parts[1] ?? null) : null;
@@ -624,6 +640,9 @@ async function main() {
       case 'home':
         el.innerHTML = renderHome();
         break;
+      case 'docs':
+        el.innerHTML = renderHelpCenter();
+        break;
       case 'classes':
         el.innerHTML = renderClasses();
         break;
@@ -642,7 +661,7 @@ async function main() {
       default:
         el.innerHTML = renderHome();
     }
-    if (ui.page === 'home') void initializeHelp();
+    if (ui.page === 'docs') void initializeHelp();
     const yearPicker = document.getElementById(
       'activity-year',
     ) as HTMLSelectElement | null;
@@ -676,7 +695,7 @@ async function main() {
       startMatchTimer();
     if (ui.page === 'study' && ui.study?.mode === 'write' && !ui.study.feedback)
       document.getElementById('write-input')?.focus();
-    if (ui.page === 'home') focusHelpTopic();
+    if (ui.page === 'docs') focusHelpTopic();
     if (routeSetup) {
       const setup = routeSetup;
       routeSetup = null;
@@ -764,7 +783,7 @@ async function main() {
  <div class="home-recent-grid"><section class="table-panel recent-sets-panel"><div class="section-heading"><h2>Học phần gần đây</h2><button class="section-link" data-nav="library">Xem tất cả ${ico('arrow', 14)}</button></div>${recentDecks()}</section>${renderSessionHistory()}</div>
  ${renderInsights()}
  <div class="home-lower"><div class="wide-promo"><div><h2>Đến lúc củng cố trí nhớ! ✨</h2><p>${count ? `Có ${count} thẻ đến hạn. Dành vài phút để nhớ lâu hơn với ôn tập ngắt quãng.` : 'Bạn đã hoàn thành những thẻ đến hạn. Tiếp tục học để xây dựng thói quen nhé!'}</p><button class="btn" data-nav="review">${ico('repeat', 16)} ${count ? 'Ôn tập ngay' : 'Xem lịch ôn tập'}</button></div></div>
- <div class="mini-panel"><h3>💡 Mẹo học hiệu quả</h3><p>Thay vì đọc đi đọc lại, hãy <strong>tự trả lời trước khi lật thẻ</strong>. Chế độ Trắc nghiệm và Viết giúp luyện khả năng nhớ chủ động.</p><button class="section-link" data-nav="library" style="margin-top:14px">Khám phá các chế độ học ${ico('arrow', 14)}</button></div></div>${renderHelpCenter()}`;
+ <div class="mini-panel"><h3>💡 Mẹo học hiệu quả</h3><p>Thay vì đọc đi đọc lại, hãy <strong>tự trả lời trước khi lật thẻ</strong>. Chế độ Trắc nghiệm và Viết giúp luyện khả năng nhớ chủ động.</p><button class="section-link" data-nav="library" style="margin-top:14px">Khám phá các chế độ học ${ico('arrow', 14)}</button></div></div>`;
   }
   function deckMatches(deck: Deck, query: string) {
     return norm(
@@ -1050,7 +1069,7 @@ async function main() {
       .slice((duePage - 1) * 5, duePage * 5)
       .map(
         ({ deck, card }) =>
-          `<article class="due-card-row"><div class="due-card-content"><strong data-user-content>${esc(card.front)}</strong>${cardMasteryMarkup(card)}<p data-user-content>${esc(card.back)}</p></div><div class="due-card-source"><button type="button" class="section-link" data-deck="${esc(deck.id)}"><span data-user-content>${esc(deck.title)}</span>${ico('arrow', 14)}</button><small>${!card.last ? 'Chưa học' : 'Đến hạn'}${card.last && card.due ? ` · ${new Date(card.due).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN')}` : ''}</small></div></article>`,
+          `<article class="due-card-row"><div class="due-card-content"><strong data-user-content>${esc(card.front)}</strong>${cardMasteryMarkup(card)}<p data-user-content>${esc(card.back)}</p></div><div class="due-card-source"><button type="button" class="section-link" data-deck="${esc(deck.id)}"><span data-user-content>${esc(deck.title)}</span>${ico('arrow', 14)}</button><small>${!card.last ? 'Chưa học' : 'Đến hạn'}${card.last && card.due ? ` · ${new Date(card.due).toLocaleString(uiLocale())}` : ''}</small></div></article>`,
       )
       .join(
         '',
@@ -1083,16 +1102,16 @@ async function main() {
     return `<section class="table-panel srs-panel"><div class="section-heading"><div><h2>Lịch ôn & quản lý thẻ</h2><p class="help-note">Dự kiến theo lịch hiện tại. Kết quả học tiếp theo có thể thay đổi lịch này.</p></div><button type="button" class="btn outline" data-action="srs-settings">${ico('settings', 16)} Cấu hình ôn tập</button></div>
       <div class="srs-filters"><div class="form-field"><label for="srs-deck-filter">Học phần</label><select id="srs-deck-filter"><option value="">Tất cả học phần</option>${data.decks.map((deck) => `<option data-user-content value="${esc(deck.id)}" ${scheduleDeck === deck.id ? 'selected' : ''}>${esc(deck.title)}</option>`).join('')}</select></div><div class="form-field"><label for="srs-days">Xem lịch trong</label><select id="srs-days">${[14, 30, 90].map((n) => `<option value="${n}" ${scheduleDays === n ? 'selected' : ''}>${n} ngày</option>`).join('')}</select></div></div>
       <div class="srs-view-tabs"><button class="btn ${scheduleSelection === 'due' ? 'primary' : 'outline'}" data-srs-date="due">Cần ôn ngay <span data-user-content>(${schedule.due.length})</span></button><button class="btn ${scheduleSelection === 'all' ? 'primary' : 'outline'}" data-srs-date="all">Tất cả thẻ <span data-user-content>(${schedule.entries.length})</span></button><button class="btn ${scheduleSelection === 'paused' ? 'primary' : 'outline'}" data-srs-date="paused">Tạm dừng <span data-user-content>(${schedule.paused.length})</span></button></div>
-      <div class="srs-calendar" aria-label="Lịch ôn sắp tới">${schedule.calendar.map((day, index) => `<button type="button" class="srs-day ${day.key === scheduleSelection ? 'selected' : ''}" data-srs-date="${day.key}" aria-pressed="${day.key === scheduleSelection}"><span>${index === 0 ? 'Hôm nay' : index === 1 ? 'Ngày mai' : `<span data-user-content>${new Date(day.start).toLocaleDateString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN', { day: '2-digit', month: '2-digit' })}</span>`}</span><strong data-user-content>${day.items.length}</strong><small>thẻ</small></button>`).join('')}</div>
-      <div class="section-heading srs-list-heading"><h3>${selected ? `<span data-user-content>${new Date(selected.start).toLocaleDateString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN', { dateStyle: 'full' })}</span>` : scheduleSelection === 'all' ? 'Tất cả thẻ' : scheduleSelection === 'paused' ? 'Thẻ tạm dừng' : 'Thẻ cần ôn ngay'}</h3><span data-user-content>${items.length}</span></div>
-      <div class="srs-card-list">${rows.map(({ deck, card }) => `<article class="srs-card-row"><div class="srs-card-copy"><strong data-user-content>${esc(card.front)}</strong><p data-user-content>${esc(card.back)}</p><button type="button" class="section-link" data-deck="${esc(deck.id)}"><span data-user-content>${esc(deck.title)}</span></button></div><div class="srs-card-meta"><span>${card.suspended ? 'Tạm dừng' : !card.last ? 'Chưa học' : card.due <= now ? 'Đến hạn' : 'Sắp tới'}</span>${cardMasteryMarkup(card)}<time data-user-content>${card.due ? new Date(card.due).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN') : '—'}</time></div><div class="srs-card-actions"><button type="button" class="btn outline small" data-srs-edit="${esc(card.id)}" data-srs-deck="${esc(deck.id)}">Sửa lịch</button><button type="button" class="btn outline small" data-srs-pause="${esc(card.id)}" data-srs-deck="${esc(deck.id)}">${card.suspended ? 'Tiếp tục ôn' : 'Tạm dừng ôn'}</button></div></article>`).join('') || '<p class="srs-empty">Không có thẻ trong khoảng thời gian này.</p>'}</div>${listPagination(items.length, 'srs')}</section>`;
+      <div class="srs-calendar" aria-label="Lịch ôn sắp tới">${schedule.calendar.map((day, index) => `<button type="button" class="srs-day ${day.key === scheduleSelection ? 'selected' : ''}" data-srs-date="${day.key}" aria-pressed="${day.key === scheduleSelection}"><span>${index === 0 ? 'Hôm nay' : index === 1 ? 'Ngày mai' : `<span data-user-content>${new Date(day.start).toLocaleDateString(uiLocale(), { day: '2-digit', month: '2-digit' })}</span>`}</span><strong data-user-content>${day.items.length}</strong><small>thẻ</small></button>`).join('')}</div>
+      <div class="section-heading srs-list-heading"><h3>${selected ? `<span data-user-content>${new Date(selected.start).toLocaleDateString(uiLocale(), { dateStyle: 'full' })}</span>` : scheduleSelection === 'all' ? 'Tất cả thẻ' : scheduleSelection === 'paused' ? 'Thẻ tạm dừng' : 'Thẻ cần ôn ngay'}</h3><span data-user-content>${items.length}</span></div>
+      <div class="srs-card-list">${rows.map(({ deck, card }) => `<article class="srs-card-row"><div class="srs-card-copy"><strong data-user-content>${esc(card.front)}</strong><p data-user-content>${esc(card.back)}</p><button type="button" class="section-link" data-deck="${esc(deck.id)}"><span data-user-content>${esc(deck.title)}</span></button></div><div class="srs-card-meta"><span>${card.suspended ? 'Tạm dừng' : !card.last ? 'Chưa học' : card.due <= now ? 'Đến hạn' : 'Sắp tới'}</span>${cardMasteryMarkup(card)}<time data-user-content>${card.due ? new Date(card.due).toLocaleString(uiLocale()) : '—'}</time></div><div class="srs-card-actions"><button type="button" class="btn outline small" data-srs-edit="${esc(card.id)}" data-srs-deck="${esc(deck.id)}">Sửa lịch</button><button type="button" class="btn outline small" data-srs-pause="${esc(card.id)}" data-srs-deck="${esc(deck.id)}">${card.suspended ? 'Tiếp tục ôn' : 'Tạm dừng ôn'}</button></div></article>`).join('') || '<p class="srs-empty">Không có thẻ trong khoảng thời gian này.</p>'}</div>${listPagination(items.length, 'srs')}</section>`;
   }
   function srsSettingsModal() {
     const settings = data.preferences?.srs ?? defaultSrsPreferences;
     modal(
       'Cấu hình ôn tập cách quãng',
       'Cấu hình riêng cho người dùng hiện tại.',
-      `<div class="srs-interval-inputs">${settings.intervals.map((days, i) => `<div class="form-field"><label for="srs-interval-${i}">Cấp ${i + 1} (ngày)</label><input id="srs-interval-${i}" type="number" min="1" max="3650" step="1" required value="${days}"></div>`).join('')}</div><div class="form-field"><label for="srs-retry">Học lại sau khi trả lời sai (phút)</label><input id="srs-retry" type="number" min="1" max="10080" step="1" required value="${settings.retryMinutes}"></div><p class="help-note">Khoảng cách của 6 cấp phải tăng dần. Lên cấp cần đủ lượt đúng và các dạng luyện tập; trả lời sai về cấp 0.</p><label class="srs-recalculate"><input id="srs-recalculate" type="checkbox"><span>Tính lại lịch các thẻ đã học từ lần học gần nhất</span></label><p class="help-note">Không chọn: giữ lịch hiện có, áp dụng cấu hình từ lượt học tiếp theo. Chọn: thay cả ngày ôn đã chỉnh thủ công; thẻ chưa học và thẻ tạm dừng giữ nguyên.</p><p id="srs-config-error" class="test-submit-error" role="alert" hidden></p><button type="button" class="btn outline" data-action="srs-defaults">Điền cấu hình mặc định</button>`,
+      `<div class="srs-interval-inputs">${settings.intervals.map((days, i) => `<div class="form-field"><label for="srs-interval-${i}">Cấp ${i + 1} (ngày)</label><input id="srs-interval-${i}" type="number" min="1" max="3650" step="1" required value="${days}"></div>`).join('')}</div><div class="form-field"><label for="srs-retry">Học lại sau khi trả lời sai (phút)</label><input id="srs-retry" type="number" min="1" max="10080" step="1" required value="${settings.retryMinutes}"></div><p class="help-note">Khoảng cách của 6 cấp phải tăng dần. Trả lời sai trừ tiến độ; chỉ sai khi đã 0 điểm mới hạ một cấp.</p><label class="srs-recalculate"><input id="srs-recalculate" type="checkbox"><span>Tính lại lịch các thẻ đã học từ lần học gần nhất</span></label><p class="help-note">Không chọn: giữ lịch hiện có, áp dụng cấu hình từ lượt học tiếp theo. Chọn: thay cả ngày ôn đã chỉnh thủ công; thẻ chưa học và thẻ tạm dừng giữ nguyên.</p><p id="srs-config-error" class="test-submit-error" role="alert" hidden></p><button type="button" class="btn outline" data-action="srs-defaults">Điền cấu hình mặc định</button>`,
       'srs-settings',
     );
   }
@@ -1119,7 +1138,7 @@ async function main() {
         <div class="review-summary-heading"><h2 id="review-summary-title">Tổng số thẻ đang chờ</h2><span class="stat-icon orange">${ico('calendar', 22)}</span></div>
         <div class="stat-number">${t.due}</div><p class="stat-foot">Các thẻ chưa học hoặc đã đến hạn ôn.</p>
         ${t.due ? `<button class="btn primary" data-study-all="review">${ico('repeat', 17)} Ôn tất cả (${t.due})</button>` : ''}
-        <div class="review-schedule-note"><h3>🧠 Lịch ôn đang áp dụng</h3><p>Thẻ được hẹn ôn theo cấp ghi nhớ đã đạt.</p><strong data-user-content>${settings.intervals.join(' → ')}</strong><p>Trả lời sai: về cấp 0 và học lại sau <span data-user-content>${settings.retryMinutes}</span> <span>phút</span>.</p><button class="btn outline small" data-action="srs-settings">Cấu hình ôn tập</button></div>
+        <div class="review-schedule-note"><h3>🧠 Lịch ôn đang áp dụng</h3><p>Thẻ được hẹn ôn theo cấp ghi nhớ đã đạt.</p><strong data-user-content>${settings.intervals.join(' → ')}</strong><p>Trả lời sai: học lại sau <span data-user-content>${settings.retryMinutes}</span> <span>phút</span>.</p><button class="btn outline small" data-action="srs-settings">Cấu hình ôn tập</button></div>
       </section>
       ${t.due ? dueCardList() : `<section class="table-panel review-empty"><div class="section-heading"><h2>Thẻ cần ôn</h2><span>0 thẻ</span></div><div class="empty"><span class="empty-icon">🎉</span><h3>Không còn thẻ đến hạn!</h3><p>Bạn đã hoàn thành lịch ôn tập hiện tại. Hãy quay lại ngày mai hoặc học các thẻ mới.</p><button class="btn primary" data-nav="library">Đến thư viện ${ico('arrow', 15)}</button></div></section>`}
       </div>${renderSchedule()}</section>`;
@@ -1148,7 +1167,7 @@ async function main() {
               : getDeck(session.deckId)?.title || 'Học phần đã xóa');
           const mode =
             modes.find((m) => m[0] === session.mode)?.[1] || session.mode;
-          return `<div class="history-session-row"><button type="button" class="history-item" data-session="${esc(session.id)}" aria-label="Xem chi tiết phiên ${esc(name)}"><span class="history-dot">${ico('cards', 16)}</span><span class="history-info"><strong data-user-content>${esc(name)}</strong><span>${esc(mode)} · ${new Date(session.date).toLocaleString('vi-VN')}</span></span><span class="history-count">${session.correct}/${session.answers}<small>${['flashcards', 'review'].includes(session.mode) ? 'đã nhớ' : 'đúng'}</small></span>${ico('chevron', 14)}</button><button type="button" class="icon-button history-delete" data-delete-session="${esc(session.id)}" title="Xóa phiên học" aria-label="Xóa phiên học ${esc(name)}">${ico('trash', 16)}</button></div>`;
+          return `<div class="history-session-row"><button type="button" class="history-item" data-session="${esc(session.id)}" aria-label="Xem chi tiết phiên ${esc(name)}"><span class="history-dot">${ico('cards', 16)}</span><span class="history-info"><strong data-user-content>${esc(name)}</strong><span><span>${esc(mode)}</span> · <time data-user-content data-ui-date datetime="${new Date(session.date).toISOString()}">${new Date(session.date).toLocaleString(uiLocale())}</time></span></span><span class="history-count">${session.correct}/${session.answers}<small>${['flashcards', 'review'].includes(session.mode) ? 'đã nhớ' : 'đúng'}</small></span>${ico('chevron', 14)}</button><button type="button" class="icon-button history-delete" data-delete-session="${esc(session.id)}" title="Xóa phiên học" aria-label="Xóa phiên học ${esc(name)}">${ico('trash', 16)}</button></div>`;
         })
         .join('') ||
       `<p class="help-note">${historyFrom || historyTo ? 'Không có phiên học trong khoảng ngày đã chọn.' : 'Chưa có phiên học. Học thử một bộ thẻ nhé!'}</p>`
@@ -1165,7 +1184,7 @@ async function main() {
     modal(
       'Chi tiết phiên học',
       session.deckTitle ?? getDeck(session.deckId)?.title ?? 'Học phần đã xóa',
-      `<div class="session-summary"><span>${esc(mode)}</span><span>${new Date(session.date).toLocaleString('vi-VN')}</span><strong>${session.correct}/${session.answers} ${['flashcards', 'review'].includes(session.mode) ? 'đã nhớ' : 'đúng'}</strong>${session.durationSeconds !== undefined ? `<span>Thời gian: ${formatTime(session.durationSeconds)}</span>` : ''}${session.completed !== undefined ? `<span>${session.completed ? 'Đã hoàn thành' : 'Đã dừng giữa chừng'}</span>` : ''}</div><div class="session-result-list">${rows.map((r, i) => `<article class="review-row"><div><strong data-user-content>${offset + i + 1}. ${esc(r.front)}</strong><p data-user-content>${['flashcards', 'review'].includes(session.mode) ? 'Đánh giá' : 'Bạn trả lời'}: ${esc(r.userAnswer ?? '(không ghi lại)')}</p><p data-user-content>Đáp án: ${esc(r.correctAnswer)}</p></div><span class="${r.ok ? 'correct-label' : 'wrong-label'}">${r.assessed === false ? 'Chưa đánh giá' : ['flashcards', 'review'].includes(session.mode) ? (r.ok ? 'Đã nhớ' : 'Chưa nhớ') : r.ok ? '✓ Đúng' : '✕ Sai'}</span></article>`).join('') || '<p class="help-note">Phiên học cũ chỉ lưu tổng điểm, chưa có chi tiết từng câu. Các phiên học mới sẽ lưu câu hỏi, đáp án và câu trả lời.</p>'}</div>${listPagination(results.length, 'session-detail')}`,
+      `<div class="session-summary"><span>${esc(mode)}</span><time data-user-content data-ui-date datetime="${new Date(session.date).toISOString()}">${new Date(session.date).toLocaleString(uiLocale())}</time><strong>${session.correct}/${session.answers} ${['flashcards', 'review'].includes(session.mode) ? 'đã nhớ' : 'đúng'}</strong>${session.durationSeconds !== undefined ? `<span>Thời gian: ${formatTime(session.durationSeconds)}</span>` : ''}${session.completed !== undefined ? `<span>${session.completed ? 'Đã hoàn thành' : 'Đã dừng giữa chừng'}</span>` : ''}</div><div class="session-result-list">${rows.map((r, i) => `<article class="review-row"><div><strong data-user-content>${offset + i + 1}. ${esc(r.front)}</strong><p><span>${['flashcards', 'review'].includes(session.mode) ? 'Đánh giá:' : 'Bạn trả lời:'}</span> ${r.userAnswer === undefined ? '<span>(không ghi lại)</span>' : `<span data-user-content>${esc(r.userAnswer)}</span>`}</p><p><span>Đáp án:</span> <span data-user-content>${esc(r.correctAnswer)}</span></p></div><span class="${r.ok ? 'correct-label' : 'wrong-label'}">${r.assessed === false ? 'Chưa đánh giá' : ['flashcards', 'review'].includes(session.mode) ? (r.ok ? 'Đã nhớ' : 'Chưa nhớ') : r.ok ? '✓ Đúng' : '✕ Sai'}</span></article>`).join('') || '<p class="help-note">Phiên học cũ chỉ lưu tổng điểm, chưa có chi tiết từng câu. Các phiên học mới sẽ lưu câu hỏi, đáp án và câu trả lời.</p>'}</div>${listPagination(results.length, 'session-detail')}`,
       'session-detail',
     );
     element('modal-root')
@@ -1713,7 +1732,7 @@ async function main() {
         <div class="form-field" data-card-field="term"><label for="card-front">Thuật ngữ <span class="field-required">*</span></label><textarea id="card-front" required maxlength="4000" rows="2" placeholder="Từ hoặc câu hỏi">${esc(c?.front || '')}</textarea></div>
         <section class="card-definitions-field" data-card-field="definitions" aria-labelledby="card-definitions-title">
           <div class="section-heading"><h3 id="card-definitions-title">Định nghĩa <span class="field-required">*</span></h3>${createButton('Thêm định nghĩa', 'data-add-definition')}</div>
-          <div class="card-parts-help"><a class="section-link help-link" data-help-link href="#/home/guide/parts" target="_blank" rel="noopener" title="Mở hướng dẫn trong tab mới">Tra cứu từ loại tiếng Anh ↗</a></div>
+          <div class="card-parts-help"><a class="section-link help-link" data-help-link href="#/docs/parts" target="_blank" rel="noopener" title="Mở hướng dẫn trong tab mới">Tra cứu từ loại tiếng Anh ↗</a></div>
           <div class="definition-row form-field" data-primary-definition><div class="definition-input"><label for="card-part">Từ loại <span class="optional-label">Tùy chọn</span></label><select id="card-part">${sensePartOptions(c?.partOfSpeech)}</select></div><div class="definition-input"><label for="card-back">Nghĩa <span class="field-required">*</span></label><textarea id="card-back" required maxlength="4000" rows="2" placeholder="Nghĩa hoặc đáp án">${esc(c?.back || '')}</textarea></div><span class="definition-remove-placeholder" aria-hidden="true"></span></div>
           <div id="additional-definitions">${(c?.definitions ?? []).map((value) => definitionField(value, c?.partOfSpeech)).join('')}</div>
         </section>
@@ -2165,7 +2184,9 @@ async function main() {
       );
       return;
     }
-    const help = target.closest<HTMLAnchorElement>('[data-help-link]');
+    const help = target.closest<HTMLAnchorElement>(
+      '[data-help-link],.docs-toc a',
+    );
     if (help) {
       if (help.target === '_blank') return;
       event.preventDefault();
@@ -2627,7 +2648,7 @@ async function main() {
         );
         break;
       case 'import-guide':
-        location.hash = '#/home/guide/import';
+        location.hash = '#/docs/import';
         break;
       case 'import-csv':
         element('csv-file').click();
@@ -3281,7 +3302,7 @@ async function main() {
   exitGuard = installStudyExitGuard({
     navigate: () => {
       readRoute();
-      if (!location.hash.startsWith('#/home/guide/'))
+      if (!location.hash.startsWith('#/docs/'))
         window.scrollTo({ top: 0, behavior: 'auto' });
       render();
     },

@@ -2725,6 +2725,165 @@ textarea[aria-invalid='true'] {
   margin: 0 0 14px;
   font-size: 14px;
 }
+.language-select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+.docs-page {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 24px;
+  max-width: 1180px;
+  margin-inline: auto;
+}
+.docs-heading {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+  gap: 16px;
+  margin-bottom: 0;
+}
+.docs-mark {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 56px;
+  height: 56px;
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--blue);
+  border: 1px solid var(--line);
+}
+.docs-toc {
+  display: grid;
+  align-self: start;
+  position: sticky;
+  top: 96px;
+  gap: 6px;
+}
+.docs-toc a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 14px;
+}
+.docs-toc a svg {
+  flex-shrink: 0;
+}
+.docs-toc a:hover,
+.docs-toc a[aria-current] {
+  background: var(--surface);
+  color: var(--blue);
+}
+.docs-page .docs-content {
+  margin: 0;
+  min-width: 0;
+  padding: 20px;
+  border-radius: 20px;
+}
+.docs-content .import-guide {
+  scroll-margin-top: 100px;
+}
+.docs-content li {
+  margin-block: 10px;
+  line-height: 1.7;
+}
+.docs-content pre {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.docs-references {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+.docs-tool-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-block: 16px;
+}
+.docs-tool {
+  border: 1px solid var(--line);
+  padding: 12px 16px;
+  border-radius: 12px;
+  margin-block: 12px;
+  scroll-margin-top: 100px;
+}
+.docs-tool > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+}
+.docs-tool > summary code {
+  font-weight: 700;
+  color: var(--blue);
+}
+.docs-tool > summary span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.docs-tool h4 {
+  margin-bottom: 8px;
+}
+.help-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+@media (max-width: 850px) {
+  .docs-page {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  .docs-toc {
+    position: static;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .docs-toc a {
+    padding: 10px;
+  }
+  .docs-page .docs-content {
+    padding: 12px;
+  }
+}
+.mcp-settings label {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+  font-size: 13px;
+}
+.mcp-settings [hidden] {
+  display: none;
+}
+.mcp-settings select,
+.mcp-settings textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+.mcp-settings textarea {
+  margin: 10px 0;
+  resize: vertical;
+  font: 12px/1.5 monospace;
+}
 .theme-options {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

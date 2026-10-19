@@ -81,6 +81,16 @@
             ><span>Ôn tập đến hạn</span
             ><span id="due-pill" class="nav-count">0</span>
           </button>
+          <button
+            type="button"
+            data-nav="docs"
+            aria-label="Docs"
+            title="Docs"
+            class="nav-link"
+            id="nav-docs"
+          >
+            <span class="nav-icon" data-icon="document"></span><span>Docs</span>
+          </button>
         </nav>
         <div class="topbar-right">
           <details id="settings" class="settings">
@@ -101,25 +111,23 @@
               </div>
               <div class="settings-section">
                 <h3>Ngôn ngữ</h3>
-                <div
-                  class="language-options theme-options"
-                  role="group"
-                  aria-label="Ngôn ngữ"
+                <select
+                  id="interface-language"
+                  class="language-select"
+                  aria-label="Ngôn ngữ giao diện"
                 >
-                  <button
-                    type="button"
-                    data-language="vi"
-                    aria-label="Tiếng Việt"
-                  >
-                    VN</button
-                  ><button
-                    type="button"
-                    data-language="en"
-                    aria-label="English"
-                  >
-                    EN
-                  </button>
-                </div>
+                  <option value="vi" lang="vi" data-user-content>
+                    Tiếng Việt
+                  </option>
+                  <option value="en" lang="en" data-user-content>
+                    English
+                  </option>
+                  <option value="ko" lang="ko" data-user-content>한국어</option>
+                  <option value="zh" lang="zh-CN" data-user-content>
+                    中文（简体）
+                  </option>
+                  <option value="ja" lang="ja" data-user-content>日本語</option>
+                </select>
               </div>
               <div class="settings-section">
                 <h3>Giao diện</h3>
@@ -219,11 +227,62 @@
                   role="status"
                 ></p>
               </div>
+              <div class="settings-section mcp-settings" id="settings-mcp">
+                <h3>Kết nối AI qua MCP</h3>
+                <a
+                  class="section-link help-link"
+                  data-help-link
+                  href="#/docs/mcp"
+                  >Hướng dẫn kết nối MCP →</a
+                >
+                <p class="help-note">
+                  Cho Claude, Codex hoặc ứng dụng hỗ trợ MCP đọc và quản lý học
+                  phần trên máy này.
+                </p>
+                <label
+                  >Quyền truy cập
+                  <select data-mcp-access>
+                    <option value="false">Chỉ đọc</option>
+                    <option value="true">Đọc và sửa thẻ, học phần</option>
+                  </select>
+                </label>
+                <label
+                  >Ứng dụng AI
+                  <select data-mcp-format>
+                    <option value="json">Claude Desktop / JSON</option>
+                    <option value="toml">Codex / TOML</option>
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  class="btn outline settings-export"
+                  data-mcp-generate
+                >
+                  Tạo cấu hình kết nối
+                </button>
+                <textarea
+                  data-mcp-config
+                  aria-label="Cấu hình MCP"
+                  rows="8"
+                  readonly
+                  spellcheck="false"
+                  hidden
+                ></textarea>
+                <button
+                  type="button"
+                  class="btn outline settings-export"
+                  data-mcp-copy
+                  hidden
+                >
+                  Sao chép cấu hình
+                </button>
+                <p class="help-note" role="status" data-mcp-status></p>
+              </div>
               <a
                 class="section-link help-link"
                 data-help-link
-                href="#/home/guide/backup"
-                >Xem hướng dẫn tại Tổng quan →</a
+                href="#/docs/backup"
+                >Mở tài liệu trong Docs →</a
               >
               <p id="sync-status" class="settings-sync" role="status">
                 Đang kết nối…

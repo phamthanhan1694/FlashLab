@@ -1,7 +1,117 @@
 import { partOptions, formatPartOfSpeech } from './parts-of-speech';
-export type Language = 'vi' | 'en';
+import { docsMessages } from './docs-messages';
+import { referencePhrases } from './docs-reference-copy';
+import { localeMessages } from './locales';
+import { uiLanguages, type UiLanguage } from '@flashlab/shared';
+export type Language = UiLanguage;
+export function uiLocale() {
+  return (
+    { vi: 'vi-VN', en: 'en-US', ko: 'ko-KR', zh: 'zh-CN', ja: 'ja-JP' } as const
+  )[language];
+}
 let language: Language = 'vi';
 const phrases: Record<string, string> = {
+  ...docsMessages,
+  ...referencePhrases,
+  'Ngôn ngữ giao diện': 'Interface language',
+  đúng: 'correct',
+  'Ôn tập': 'Review',
+  'Về trang chủ': 'Go to home',
+  'FlashLab — Học theo cách của bạn': 'FlashLab — Study your way',
+  'Dữ liệu của bạn lưu trên thiết bị': 'Your data is stored on this device',
+  'File CSV có dấu nháy kép chưa đóng.':
+    'The CSV file contains an unclosed quote.',
+  'Tối đa 10.000 thẻ mỗi lần nhập.': 'Import up to 10,000 cards at a time.',
+  'Bảng tính quá lớn.': 'The spreadsheet is too large.',
+  'Không đọc được trang tính đầu tiên.': 'Could not read the first worksheet.',
+  'Màu tăng liên tục theo lượt học':
+    'Color intensity increases with study answers',
+  'Không tải được bộ vẽ sơ đồ.': 'Could not load the diagram renderer.',
+  'Sơ đồ quá dài (tối đa 20.000 ký tự).':
+    'The diagram is too long (maximum 20,000 characters).',
+  'Sơ đồ dùng !include chưa được hỗ trợ. Hãy viết nội dung sơ đồ trực tiếp.':
+    'Diagrams using !include are not supported. Write the diagram content directly.',
+  'Vẽ sơ đồ mất quá nhiều thời gian.': 'Diagram rendering timed out.',
+  'Phân trang avatar': 'Avatar pages',
+  'Đang lưu ảnh đại diện…': 'Saving avatar…',
+  'Đã lưu ảnh đại diện.': 'Avatar saved.',
+  'Chưa lưu được ảnh đại diện lên máy chủ.':
+    'The avatar has not been saved to the server.',
+  'Ứng dụng sẽ tự lưu một database dự phòng trước khi thay đổi.':
+    'A recovery database is saved automatically before changes are applied.',
+  'Không lưu được lựa chọn người dùng. Hãy cho phép bộ nhớ trình duyệt.':
+    'Could not save the selected profile. Allow browser storage and try again.',
+  'Phân trang người dùng': 'Profile pages',
+  'Không đổi được người dùng.': 'Could not switch profiles.',
+  'Không xóa được người dùng.': 'Could not delete the profile.',
+  'Không thêm được người dùng.': 'Could not add the profile.',
+  Bật: 'Unmute',
+  Tắt: 'Mute',
+  'Dừng nghe thử': 'Stop preview',
+  'Tiếp tục học': 'Continue studying',
+  'Có lỗi xảy ra': 'Something went wrong',
+  'Thời gian còn lại trước khi chuyển câu':
+    'Time remaining before the next question',
+  'Dữ liệu đã lưu không đúng định dạng FlashLab.':
+    'Saved data is not in the FlashLab format.',
+  'Chưa đánh giá': 'Not assessed',
+  'Phân trang danh sách': 'List pages',
+  'Chưa có học phần. Tạo học phần để bắt đầu.':
+    'No study sets yet. Create one to get started.',
+  'Học phần gần đây': 'Recent study sets',
+  'Nhập Excel / CSV': 'Import Excel / CSV',
+  '(ngày)': '(days)',
+  'Chi tiết phiên học': 'Study session details',
+  'Đã hoàn thành': 'Completed',
+  'Đã dừng giữa chừng': 'Stopped early',
+  'Đánh giá': 'Assessment',
+  'Bạn trả lời:': 'Your answer:',
+  'Đánh giá:': 'Assessment:',
+  'Đáp án:': 'Answer:',
+  'Đáp án gợi ý:': 'Suggested answer:',
+  'nội dung': 'content',
+  '(không ghi lại)': '(not recorded)',
+  'Phiên học cũ chỉ lưu tổng điểm, chưa có chi tiết từng câu. Các phiên học mới sẽ lưu câu hỏi, đáp án và câu trả lời.':
+    'Older sessions contain only total scores. New sessions save questions, correct answers and your responses.',
+  '(bỏ trống)': '(blank)',
+  'Nhập từ ở mặt trước để nghe phát âm.':
+    'Enter a term on the front to hear its pronunciation.',
+  'Trình duyệt này chưa hỗ trợ giọng đọc.':
+    'This browser does not support speech synthesis.',
+  'Không phát được giọng đọc. Hãy kiểm tra giọng của ngôn ngữ đã chọn trên thiết bị.':
+    'Could not play speech. Check that a voice for the selected language is installed on your device.',
+  '(bỏ qua)': '(skip)',
+  'Không có từ vựng hợp lệ để nhập.': 'No valid vocabulary to import.',
+  'File lớn hơn 5 MB.': 'The file exceeds 5 MB.',
+  'Ghép thẻ': 'Match',
+  'Chèn khối mã': 'Insert code block',
+  'Sắc màu': 'Hue',
+  'Độ đậm': 'Saturation',
+  'Bảng màu tùy chọn: dùng chuột để chọn hoặc các thanh bên dưới':
+    'Custom color picker: select a color or use the sliders below',
+  'Nhập 3 hoặc 6 ký tự HEX (0–9, A–F), ví dụ #7c3aed.':
+    'Enter 3 or 6 HEX digits (0–9, A–F), for example #7c3aed.',
+  'Kết nối AI qua MCP': 'Connect AI via MCP',
+  'Cho Claude, Codex hoặc ứng dụng hỗ trợ MCP đọc và quản lý học phần trên máy này.':
+    'Let Claude, Codex or another MCP app read and manage study sets on this computer.',
+  'Quyền truy cập': 'Access permissions',
+  'Chỉ đọc': 'Read only',
+  'Đọc và sửa thẻ, học phần': 'Read and edit cards and study sets',
+  'Ứng dụng AI': 'AI application',
+  'Tạo cấu hình kết nối': 'Generate connection configuration',
+  'Cấu hình MCP': 'MCP configuration',
+  'Sao chép cấu hình': 'Copy configuration',
+  'Đang chuẩn bị cấu hình MCP…': 'Preparing MCP configuration…',
+  'Đã sao chép cấu hình MCP.': 'MCP configuration copied.',
+  'Không lấy được cấu hình MCP. Kiểm tra kết nối tới FlashLab.':
+    'Could not retrieve MCP configuration. Check your connection to FlashLab.',
+  'Không tạo được cấu hình MCP.': 'Could not generate MCP configuration.',
+  'Cấu hình đã được chọn. Nhấn Ctrl+C để sao chép.':
+    'Configuration selected. Press Ctrl+C to copy.',
+  'Tạo cấu hình mới rồi cập nhật trong ứng dụng AI và kết nối lại. Quyền của kết nối cũ chỉ thay đổi sau khi cập nhật cấu hình bên đó.':
+    'Generate a new configuration, update it in your AI app and reconnect. Existing connections keep their permissions until their configuration is updated there.',
+  'Dán cấu hình vào ứng dụng AI trên cùng máy rồi kết nối lại. Sau khi AI sửa dữ liệu, tải lại FlashLab để thấy thay đổi.':
+    'Paste this configuration into an AI app on the same computer and reconnect. Refresh FlashLab after AI edits to see the changes.',
   'Sao lưu hồ sơ (.sqlite)': 'Back up profile (.sqlite)',
   'Sao lưu toàn bộ (.sqlite)': 'Back up everything (.sqlite)',
   'Khôi phục từ database': 'Restore from database',
@@ -190,9 +300,7 @@ const phrases: Record<string, string> = {
     'In a study set, choose Export cards → CSV, Text or Excel. All three formats export separate meaning–word class columns and the speech language. Keep the header row when editing and reimporting. Example speech languages: en-US, vi-VN, zh-CN, ja-JP and ko-KR.',
   'Tệp thẻ dùng để trao đổi nội dung. Muốn giữ cả ảnh, tiến độ và dấu đã nhớ, hãy xuất bản sao lưu SQLite trong Cài đặt.':
     'Card files exchange vocabulary content. To keep images, progress and remembered marks, export a SQLite backup in Settings.',
-  'Tương thích file cũ và từ trùng': 'Older files and duplicates',
-  'File cũ có 2–6 trường hoặc cột definitions vẫn nhập được. JSON trong definitions giữ từng cặp meaning và partOfSpeech; nghĩa dạng chữ không có từ loại riêng sẽ dùng từ loại của nghĩa đầu tiên.':
-    'Older files with 2–6 fields or a definitions column are still supported. JSON in definitions preserves meaning and partOfSpeech pairs. Plain-text additional meanings inherit the first meaning’s word class.',
+  'Xử lý thẻ trùng': 'Handling duplicate cards',
 
   'Từ loại và viết tắt tiếng Anh': 'Parts of speech and English abbreviations',
   'FlashLab dùng thống nhất các viết tắt dưới đây cho từng nghĩa của từ.':
@@ -1158,6 +1266,21 @@ const phrases: Record<string, string> = {
 };
 // Captured content is left untouched, including names, terms and answers.
 const patterns: [RegExp, (...parts: string[]) => string][] = [
+  [/^Xem chi tiết phiên (.*)$/s, (name) => 'View session details: ' + name],
+  [
+    /^Trang (\d+) \/ (\d+) · (\d+) mục$/,
+    (page, pages, total) => `Page ${page} / ${pages} · ${total} items`,
+  ],
+  [
+    /^(\d+)\/(\d+) đã nhớ$/,
+    (correct, total) => `${correct}/${total} remembered`,
+  ],
+  [/^Thời gian: (.+)$/, (time) => `Time: ${time}`],
+  [/^Đánh giá: (.*)$/, (answer) => `Assessment: ${answer}`],
+  [
+    /^Kết nối AI tới hồ sơ (.+) trên máy chạy FlashLab\.$/,
+    (name) => `Connect AI to profile ${name} on the computer running FlashLab.`,
+  ],
   [
     /^Thay toàn bộ dữ liệu hiện tại bằng (\d+) hồ sơ, (\d+) thẻ, (\d+) bài viết và (\d+) ảnh từ database đã chọn\? Ứng dụng sẽ tự lưu một database dự phòng trước khi thay đổi\.$/,
     (profiles, cards, posts, images) =>
@@ -1274,7 +1397,7 @@ const patterns: [RegExp, (...parts: string[]) => string][] = [
   ],
 
   [
-    /^Tháng (\d+)$/,
+    /^Tháng (1[0-2]|[1-9])$/,
     (n) =>
       [
         'Jan',
@@ -1371,46 +1494,126 @@ const patterns: [RegExp, (...parts: string[]) => string][] = [
     (name) => `Study sets, progress and settings for ${name}.`,
   ],
 ];
+function localMessage(
+  english: string,
+  target: Language,
+  values: readonly string[] = [],
+) {
+  const index =
+    target === 'ko' ? 0 : target === 'zh' ? 1 : target === 'ja' ? 2 : undefined;
+  const template =
+    index === undefined
+      ? english
+      : (localeMessages[english]?.[index] ?? english);
+  return template.replace(
+    /\{\{(\d+)\}\}/g,
+    (token, n: string) => values[Number(n)] ?? token,
+  );
+}
+
+function localizedPattern(
+  pattern: RegExp,
+  format: (...parts: string[]) => string,
+  values: string[],
+  target: Language,
+) {
+  if (target === 'en') return format(...values);
+  const source = pattern.source;
+  if (source.startsWith('^Tháng '))
+    return localMessage(format(...values), target);
+  const tokens = values.map((_, i) => `{{${i}}}`);
+  const substitutions = [...values];
+  // These captures are UI labels, unlike names/terms/answers which must remain verbatim.
+  if (
+    source.startsWith('^Thứ tự ') ||
+    source.startsWith('^Dừng nghe thử ') ||
+    source.startsWith('^Vui lòng nhập ')
+  ) {
+    substitutions[0] = translateText(values[0], target);
+  }
+  if (
+    source.includes(
+      '(Thẻ ghi nhớ|Trắc nghiệm|Viết|Kiểm tra|Ghép cặp|Ôn tập cách quãng)',
+    )
+  )
+    substitutions[1] = translateText(values[1], target);
+  if (source.startsWith('^CÂU ')) tokens[1] = values[1];
+  if (source.startsWith('^(Âm lượng|Tắt|Bật|Nghe thử)')) {
+    tokens[0] = values[0];
+    substitutions[1] = translateText(values[1], target);
+  }
+  return localMessage(format(...tokens), target, substitutions);
+}
+
+// Some live controls assign translated text before the observer sees the node.
+// Keep the source recoverable when those controls later switch languages.
+const translatedSources = new Map<string, string>();
+for (const [source, english] of Object.entries(phrases)) {
+  if (!translatedSources.has(english)) translatedSources.set(english, source);
+  for (const text of localeMessages[english] ?? []) {
+    if (!translatedSources.has(text)) translatedSources.set(text, source);
+  }
+}
+
 export function translateText(
   value: string,
   target: Language = language,
 ): string {
-  const trimmed = value.trim();
+  const raw = value.trim();
+  // HTML formatting inserts line breaks and indentation into otherwise identical labels.
+  const trimmed = raw.replace(/\s+/gu, ' ');
   if (target === 'vi') {
-    const source = Object.entries(phrases).find(
-      ([, english]) => english === trimmed,
-    )?.[0];
-    return source ? value.replace(trimmed, source) : value;
+    const source = translatedSources.get(trimmed);
+    return source ? value.replace(raw, source) : value;
   }
+  const source = translatedSources.get(trimmed);
+  if (!phrases[trimmed] && source)
+    return value.replace(raw, localMessage(phrases[source], target));
+  if (phrases[trimmed])
+    return value.replace(raw, localMessage(phrases[trimmed], target));
+  if (localeMessages[trimmed])
+    return value.replace(raw, localMessage(trimmed, target));
   if (trimmed.startsWith('Lượt đúng: ')) {
-    return value
-      .replace('Lượt đúng:', 'Correct answers:')
-      .replace('Kiểm tra:', 'Test:')
-      .replace('Thẻ ghi nhớ', 'Flashcards')
-      .replace('Trắc nghiệm', 'Learn')
-      .replace('Viết', 'Write')
-      .replace('Ghép thẻ', 'Match')
-      .replace('Kiểm tra', 'Test');
+    return value.replace(
+      raw,
+      trimmed
+        .replace('Lượt đúng:', localMessage('Correct answers:', target))
+        .replace('Kiểm tra:', localMessage('Test:', target))
+        .replace('Thẻ ghi nhớ', localMessage('Flashcards', target))
+        .replace('Trắc nghiệm', localMessage('Learn', target))
+        .replace('Viết', localMessage('Write', target))
+        .replace('Ghép thẻ', localMessage('Match', target))
+        .replace('Kiểm tra', localMessage('Test', target)),
+    );
   }
   if (trimmed.endsWith(' · mở bảng ký tự'))
     return value.replace(
-      trimmed,
-      `${translateText(trimmed.slice(0, -' · mở bảng ký tự'.length), 'en')} · open symbol keyboard`,
+      raw,
+      localMessage('{{0}} · open symbol keyboard', target, [
+        translateText(trimmed.slice(0, -' · mở bảng ký tự'.length), target),
+      ]),
     );
   if (trimmed.startsWith('Chèn '))
-    return value.replace(trimmed, `Insert ${trimmed.slice(5)}`);
+    return value.replace(
+      raw,
+      localMessage('Insert {{0}}', target, [trimmed.slice(5)]),
+    );
   if (!phrases[trimmed] && trimmed.startsWith('Ví dụ: '))
-    return value.replace(trimmed, `Example: ${trimmed.slice(7)}`);
+    return value.replace(
+      raw,
+      localMessage('Example: {{0}}', target, [trimmed.slice(7)]),
+    );
   let translated = phrases[trimmed];
   if (!translated)
     for (const [pattern, format] of patterns) {
-      const match = trimmed.match(pattern);
+      // Match the original first so captured names, terms and answers keep their spacing.
+      const match = raw.match(pattern) ?? trimmed.match(pattern);
       if (match) {
-        translated = format(...match.slice(1));
+        translated = localizedPattern(pattern, format, match.slice(1), target);
         break;
       }
     }
-  return translated ? value.replace(trimmed, translated) : value;
+  return translated ? value.replace(raw, translated) : value;
 }
 const protectedContent =
   '[data-user-content],script,style,textarea,.flip-answer,.question-text,.test-question-title,.test-option span,.choice > span:not(.choice-index),.card-term,.card-definition,.deck-card h3,.deck-hero h1,.side-deck,.profile-name strong,.profile-avatar,.profile-id,.storage-path,.review-row strong,.stat-line strong';
@@ -1427,19 +1630,45 @@ const watch = () =>
     subtree: true,
     characterData: true,
     attributes: true,
-    attributeFilter: ['title', 'aria-label', 'placeholder', 'label'],
+    attributeFilter: [
+      'title',
+      'aria-label',
+      'placeholder',
+      'label',
+      'alt',
+      'aria-description',
+    ],
   });
 export function translatePage() {
   if (translating) return;
   translating = true;
   observer?.disconnect();
+  document
+    .querySelectorAll<HTMLTimeElement>('time[data-ui-date][datetime]')
+    .forEach((element) => {
+      const date = new Date(element.dateTime);
+      if (Number.isFinite(date.getTime()))
+        element.textContent = date.toLocaleString(uiLocale());
+    });
+  const title = document.querySelector('title')?.firstChild;
+  if (title) {
+    const current = title.textContent ?? '';
+    const prior = originals.get(title);
+    const source =
+      prior && current === prior.translated ? prior.source : current;
+    const translated = translateText(source);
+    originals.set(title, { source, translated });
+    title.textContent = translated;
+  }
   // Part-of-speech metadata is localizable even inside protected vocabulary.
   document
     .querySelectorAll<HTMLElement>('[data-part-of-speech]')
     .forEach((element) => {
-      element.textContent = formatPartOfSpeech(
-        element.dataset.partOfSpeech ?? '',
-        language,
+      element.textContent = translateText(
+        formatPartOfSpeech(
+          element.dataset.partOfSpeech ?? '',
+          language === 'vi' ? 'vi' : 'en',
+        ),
       );
     });
   document
@@ -1447,6 +1676,14 @@ export function translatePage() {
     .forEach((element) => {
       element.textContent = translateText(
         element.dataset.markdownUiSource ?? '',
+      );
+    });
+  document
+    .querySelectorAll<HTMLElement>('[data-markdown-ui-label-source]')
+    .forEach((element) => {
+      element.setAttribute(
+        'aria-label',
+        translateText(element.dataset.markdownUiLabelSource ?? ''),
       );
     });
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -1462,7 +1699,7 @@ export function translatePage() {
     if (current !== translated) node.textContent = translated;
   }
   for (const element of document.querySelectorAll<HTMLElement>(
-    '[title],[aria-label],[placeholder],optgroup[label]',
+    '[title],[aria-label],[placeholder],optgroup[label],[alt],[aria-description]',
   )) {
     if (element.closest('[data-user-content],script,style')) continue;
     let attributes = originalAttributes.get(element);
@@ -1474,6 +1711,8 @@ export function translatePage() {
       'title',
       'aria-label',
       'placeholder',
+      'alt',
+      'aria-description',
       ...(element.tagName === 'OPTGROUP' ? ['label'] : []),
     ]) {
       const current = element.getAttribute(key);
@@ -1496,25 +1735,26 @@ export function initializeLanguage(
   language = initial;
   const apply = () => {
     document.documentElement.lang = language;
-    document
-      .querySelectorAll<HTMLButtonElement>('[data-language]')
-      .forEach((button) =>
-        button.setAttribute(
-          'aria-pressed',
-          String(button.dataset.language === language),
-        ),
-      );
+    const select = document.getElementById(
+      'interface-language',
+    ) as HTMLSelectElement | null;
+    if (select) select.value = language;
     translatePage();
   };
   document
-    .querySelectorAll<HTMLButtonElement>('[data-language]')
-    .forEach((button) =>
-      button.addEventListener('click', () => {
-        language = button.dataset.language === 'en' ? 'en' : 'vi';
-        apply();
-        onChange(language);
-      }),
-    );
+    .getElementById('interface-language')
+    ?.addEventListener('change', (event) => {
+      const value = (event.target as HTMLSelectElement).value;
+      if (!uiLanguages.includes(value as Language)) return;
+      language = value as Language;
+      apply();
+      onChange(language);
+      document.dispatchEvent(
+        new document.defaultView!.CustomEvent('flashlab-language-change', {
+          detail: language,
+        }),
+      );
+    });
   observer = new MutationObserver(() => translatePage());
   apply();
 }

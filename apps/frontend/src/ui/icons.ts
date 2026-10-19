@@ -1,4 +1,7 @@
 const ICONS: Record<string, string> = {
+  document:
+    '<path d="M14 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9zM14 2v7h7M7 13h10M7 17h7"/>',
+  plug: '<path d="M9 3v4m6-4v4M7 7h10v4a5 5 0 0 1-10 0zM12 16v5"/>',
   book: '<path d="M12 5c-3-2-7-2-10-1v15c3-1 7-1 10 1 3-2 7-2 10-1V4c-3-1-7-1-10 1zM12 5v15"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/>',
   classroom: '<path d="m2 8 10-5 10 5-10 5zM6 10v7c3 3 9 3 12 0v-7M22 8v8"/>',

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Window } from 'happy-dom';
 import { initializeProfiles } from '../src/features/profiles/profiles';
 
-test('profile help closes its modal and navigates to overview backup instructions', async (t) => {
+test('profile help closes its modal and navigates to Docs backup instructions', async (t) => {
   const window = new Window({ url: 'http://localhost/' });
   for (const key of [
     'window',
@@ -55,7 +55,7 @@ test('profile help closes its modal and navigates to overview backup instruction
   ) as unknown as HTMLAnchorElement;
   assert.ok(link);
   link.click();
-  assert.equal(window.location.hash, '#/home/guide/backup');
+  assert.equal(window.location.hash, '#/docs/backup');
   assert.equal(window.document.querySelector('[aria-modal]'), null);
   assert.equal(
     (window.document.querySelector('.app-shell') as unknown as HTMLElement)

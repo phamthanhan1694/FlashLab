@@ -164,6 +164,12 @@ test('production frontend: initialize, create deck/card, render all study modes 
   );
   window.eval(entryBundle.replace(/export\{[^}]+\};?\s*$/, ''));
   const document = window.document;
+  const setLanguage = (language) => {
+    const select = document.getElementById('interface-language');
+    assert.ok(select);
+    select.value = language;
+    select.dispatchEvent(new window.Event('change', { bubbles: true }));
+  };
   const click = (selector) => {
     const target = document.querySelector(selector);
     assert.ok(target, `Missing control ${selector}`);
@@ -295,9 +301,9 @@ test('production frontend: initialize, create deck/card, render all study modes 
           null,
           'matching always uses random order',
         );
-      if (options.order)
+      if (options.order && mode !== 'match')
         document.getElementById('setup-order').value = options.order;
-      if (options.type)
+      if (options.type && mode === 'test')
         document.getElementById('setup-test-type').value = options.type;
       if (mode === 'test') {
         document.getElementById('setup-multiple-choice').checked =
@@ -328,7 +334,7 @@ test('production frontend: initialize, create deck/card, render all study modes 
     Array.from(document.querySelectorAll('.side-nav [data-nav]')).map(
       (node) => node.dataset.nav,
     ),
-    ['home', 'library', 'classes', 'review'],
+    ['home', 'library', 'classes', 'review', 'docs'],
   );
   click('#profile-button');
   await waitFor(
@@ -562,7 +568,7 @@ test('production frontend: initialize, create deck/card, render all study modes 
   assert.ok(
     document.querySelectorAll('.activity-grid .activity-day').length >= 365,
   );
-  click('[data-language="en"]');
+  setLanguage('en');
   assert.equal(document.documentElement.lang, 'en');
   assert.equal(
     document.querySelector('#nav-library').textContent.trim(),
@@ -586,7 +592,93 @@ test('production frontend: initialize, create deck/card, render all study modes 
     document.querySelector('#history-heading').textContent,
     'Recent sessions',
   );
-  click('[data-language="vi"]');
+  const assertEnglishUi = (route) => {
+    const remaining = new Set();
+    const vietnamese =
+      /[ăâđêôơưàáảãạằắẳẵặầấẩẫậèéẻẽẹềếểễệìíỉĩịòóỏõọồốổỗộờớởỡợùúủũụừứửữựỳýỷỹỵ]/iu;
+    const protectedContent =
+      '[data-user-content],script,style,textarea,pre,code,#profile-button,.profile-name,.deck-card h3,.deck-hero h1,.side-deck,.card-term,.card-definition,.question-text,.test-question-title,.test-option span,.flip-answer';
+    const walker = document.createTreeWalker(
+      document.body,
+      window.NodeFilter.SHOW_TEXT,
+    );
+    let node;
+    while ((node = walker.nextNode())) {
+      if (node.parentElement?.closest(protectedContent)) continue;
+      const text = (node.textContent?.trim() ?? '').replaceAll(
+        'Người dùng mặc định',
+        '',
+      );
+      if (vietnamese.test(text)) remaining.add(text);
+    }
+    assert.deepEqual([...remaining], [], `Untranslated English UI on ${route}`);
+  };
+  assertEnglishUi('home');
+  assert.equal(
+    document.querySelector('#home-guide'),
+    null,
+    'documentation has its own page',
+  );
+  for (const [route, readySelector] of [
+    ['library', '#library-grid'],
+    ['classes', '[data-sort-scope="classes"]'],
+    ['review', '.review-home'],
+    ['docs/mcp', '#guide-mcp[open]'],
+    ['home/guide/backup', '#guide-backup[open]'],
+  ]) {
+    window.location.hash = `#/${route}`;
+    await waitFor(
+      () => document.querySelector(readySelector),
+      `English ${route}`,
+    );
+    assertEnglishUi(route);
+  }
+  assert.equal(
+    window.location.hash,
+    '#/docs/backup',
+    'legacy help links redirect to Docs',
+  );
+  assert.ok(document.querySelector('#nav-docs.active svg'));
+  assert.deepEqual(
+    Array.from(
+      document.querySelector('#interface-language').options,
+      (option) => option.value,
+    ),
+    ['vi', 'en', 'ko', 'zh', 'ja'],
+  );
+  for (const [language, label] of [
+    ['ko', '학습 세트'],
+    ['zh', '学习集'],
+    ['ja', '学習セット'],
+  ]) {
+    setLanguage(language);
+    assert.equal(document.documentElement.lang, language);
+    assert.equal(
+      document.querySelector('#nav-library').textContent.trim(),
+      label,
+    );
+    for (const [route, readySelector] of [
+      ['home', '.welcome'],
+      ['library', '#library-grid'],
+      ['classes', '[data-sort-scope="classes"]'],
+      ['review', '.review-home'],
+      ['docs/mcp', '#guide-mcp[open]'],
+    ]) {
+      window.location.hash = '#/' + route;
+      await waitFor(
+        () => document.querySelector(readySelector),
+        language + ' ' + route,
+      );
+      assertEnglishUi(language + ' ' + route);
+    }
+    await waitFor(
+      () => snapshot.data.preferences.language === language,
+      language + ' preference saved',
+    );
+  }
+  click('[data-nav="home"]');
+  await waitFor(() => document.querySelector('.welcome'), 'return from Docs');
+  setLanguage('vi');
   assert.equal(
     document.querySelector('#history-heading').textContent,
     'Phiên học gần đây',
@@ -667,7 +759,7 @@ test('production frontend: initialize, create deck/card, render all study modes 
   document.getElementById('card-notes').value = 'Example note';
   const part = document.getElementById('card-part');
   part.value = 'Noun';
-  click('[data-language="en"]');
+  setLanguage('en');
   assert.equal(
     document.getElementById('modal-title').textContent,
     'Add flashcard',
@@ -695,7 +787,7 @@ test('production frontend: initialize, create deck/card, render all study modes 
     'Word or question',
   );
   assert.equal(document.getElementById('card-front').value, 'TypeScript');
-  click('[data-language="vi"]');
+  setLanguage('vi');
   assert.equal(part.selectedOptions[0].textContent, 'Danh từ (n.)');
   assert.equal(part.querySelector('optgroup').label, '8 từ loại truyền thống');
   assert.equal(
@@ -1270,12 +1362,12 @@ test('production frontend: initialize, create deck/card, render all study modes 
     /1, 2, 3/,
   );
   assert.equal(document.querySelector('.result-score'), null);
-  click('[data-language="en"]');
+  setLanguage('en');
   assert.match(
     document.getElementById('test-submit-error').textContent,
     /Cannot submit yet/,
   );
-  click('[data-language="vi"]');
+  setLanguage('vi');
 
   click('[data-test-confirm="0"]');
   assert.equal(
@@ -1593,7 +1685,7 @@ test('production frontend: initialize, create deck/card, render all study modes 
     document.querySelectorAll('.test-all-questions .test-question').length,
     16,
   );
-  click('[data-language="en"]');
+  setLanguage('en');
   assert.equal(
     document.querySelector('.test-sidebar h2').textContent,
     'Questions',
@@ -1607,7 +1699,7 @@ test('production frontend: initialize, create deck/card, render all study modes 
     document.querySelector('[data-action="test-submit"]').textContent,
     'Submit test',
   );
-  click('[data-language="vi"]');
+  setLanguage('vi');
   assert.equal(
     document.querySelector('.test-sidebar h2').textContent,
     'Danh sách câu hỏi',
@@ -1847,12 +1939,12 @@ test('production frontend: initialize, create deck/card, render all study modes 
   click('[data-action="history-clear"]');
   assert.equal(document.getElementById('history-from').value, '');
   assert.ok(document.querySelectorAll('.history-item').length > 0);
-  click('[data-language="en"]');
+  setLanguage('en');
   assert.equal(
     document.querySelector('label[for="history-from"]').textContent,
     'From date',
   );
-  click('[data-language="vi"]');
+  setLanguage('vi');
   const notification = document.querySelector('.toast');
   assert.ok(notification.querySelector('.toast-icon'));
   notification.querySelector('.toast-close').click();
@@ -2054,13 +2146,13 @@ test('production frontend: initialize, create deck/card, render all study modes 
   click('[data-nav="review"]');
   await waitFor(() => document.getElementById('srs-days'), 'review schedule');
   assert.equal(document.querySelectorAll('.srs-day').length, 14);
-  click('[data-language="en"]');
+  setLanguage('en');
   assert.equal(
     document.querySelector('.srs-panel h2').textContent,
     'Review schedule & card management',
   );
   assert.equal(document.querySelector('.srs-day > span').textContent, 'Today');
-  click('[data-language="vi"]');
+  setLanguage('vi');
 
   const range = document.getElementById('srs-days');
   range.value = '30';
@@ -2207,7 +2299,7 @@ test('production frontend: initialize, create deck/card, render all study modes 
     'Parts of speech',
   );
   assert.ok(document.querySelector('#blog-preview .hljs-keyword'));
-  click('[data-language="en"]');
+  setLanguage('en');
   assert.equal(
     document.querySelector('[data-md-tool="bold"]').getAttribute('title'),
     'Bold',
@@ -2220,7 +2312,7 @@ test('production frontend: initialize, create deck/card, render all study modes 
     document.querySelector('#blog-preview strong').textContent,
     'Noun',
   );
-  click('[data-language="vi"]');
+  setLanguage('vi');
   submit('#blog-form');
   await waitFor(
     () => document.querySelector('[data-blog-edit]'),
@@ -2428,14 +2520,14 @@ test('production frontend: initialize, create deck/card, render all study modes 
     { id: 'guide-import', open: true },
     'guide scrolling must not be overridden by page-top scrolling',
   );
-  click('.progress-panel [data-help-link]');
+  click('.docs-toc a[href="#/docs/study"]');
   await waitFor(
     () => document.querySelector('#guide-study[open]'),
     'mastery guide opened',
   );
   assert.deepEqual(scrollCalls.at(-1), { id: 'guide-study', open: true });
   document.querySelector('#guide-study').open = false;
-  click('.progress-panel [data-help-link]');
+  click('.docs-toc a[href="#/docs/study"]');
   assert.ok(
     document.querySelector('#guide-study[open]'),
     'clicking the same link reopens its guide',
@@ -2522,7 +2614,7 @@ test('production frontend: initialize, create deck/card, render all study modes 
     'Alternative meaning',
   );
   const partsHelp = document.querySelector('.card-parts-help a');
-  assert.equal(partsHelp.getAttribute('href'), '#/home/guide/parts');
+  assert.equal(partsHelp.getAttribute('href'), '#/docs/parts');
   assert.equal(partsHelp.target, '_blank');
   assert.equal(partsHelp.rel, 'noopener');
   assert.equal(document.querySelector('[data-definition-part]').value, 'Verb');

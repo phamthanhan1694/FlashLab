@@ -104,6 +104,7 @@ export function mountMarkdown(root: HTMLElement, source: string) {
     wrapper.className = 'markdown-table-scroll';
     wrapper.tabIndex = 0;
     wrapper.setAttribute('role', 'region');
+    wrapper.dataset.markdownUiLabelSource = 'Bảng nội dung';
     wrapper.setAttribute('aria-label', translateText('Bảng nội dung'));
     table.before(wrapper);
     wrapper.append(table);

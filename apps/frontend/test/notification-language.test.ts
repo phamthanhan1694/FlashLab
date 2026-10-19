@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Window, type HTMLButtonElement } from 'happy-dom';
+import {
+  Window,
+  type HTMLButtonElement,
+  type HTMLSelectElement,
+} from 'happy-dom';
 import { initializeLanguage, translateText } from '../src/core/i18n';
 import { notify } from '../src/ui/feedback';
 
@@ -20,8 +24,15 @@ test('notification title and message use the selected language and switch togeth
   }
   t.after(() => window.happyDOM.abort());
   window.document.body.innerHTML =
-    '<button data-language="vi"></button><button data-language="en"></button><div id="toast-root"></div><div class="card-term"><span data-user-content>one</span><small data-user-content data-part-of-speech="Numeral"></small><small data-user-content data-part-of-speech="Interrogative Word"></small></div>';
+    '<select id="interface-language"><option value="vi">VI</option><option value="en">EN</option></select><div id="toast-root"></div><div class="card-term"><span data-user-content>one</span><small data-user-content data-part-of-speech="Numeral"></small><small data-user-content data-part-of-speech="Interrogative Word"></small></div>';
   initializeLanguage('vi', () => {});
+  const setLanguage = (language: string) => {
+    const select = window.document.querySelector<HTMLSelectElement>(
+      '#interface-language',
+    )!;
+    select.value = language;
+    select.dispatchEvent(new window.Event('change', { bubbles: true }));
+  };
   const parts = () =>
     Array.from(
       window.document.querySelectorAll('[data-part-of-speech]'),
@@ -36,9 +47,7 @@ test('notification title and message use the selected language and switch togeth
     'Chưa thực hiện được',
   );
   assert.equal(window.document.querySelector('.toast p')?.textContent, message);
-  window.document
-    .querySelector<HTMLButtonElement>('[data-language="en"]')!
-    .click();
+  setLanguage('en');
   assert.equal(
     window.document.querySelector('.toast strong')?.textContent,
     'Unable to complete',
@@ -52,9 +61,7 @@ test('notification title and message use the selected language and switch togeth
     window.document.querySelector('.toast p')?.textContent,
     translateText(message, 'en'),
   );
-  window.document
-    .querySelector<HTMLButtonElement>('[data-language="vi"]')!
-    .click();
+  setLanguage('vi');
   assert.equal(
     window.document.querySelector('.toast strong')?.textContent,
     'Chưa thực hiện được',
@@ -62,9 +69,7 @@ test('notification title and message use the selected language and switch togeth
   assert.equal(window.document.querySelector('.toast p')?.textContent, message);
   assert.deepEqual(parts(), ['(num.)', '(interrog.)']);
   window.document.querySelector<HTMLButtonElement>('.toast-close')!.click();
-  window.document
-    .querySelector<HTMLButtonElement>('[data-language="en"]')!
-    .click();
+  setLanguage('en');
   notify(message, true);
   assert.equal(
     window.document.querySelector('.toast p')?.textContent,

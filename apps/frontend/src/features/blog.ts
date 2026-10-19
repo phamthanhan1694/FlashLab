@@ -6,7 +6,7 @@ import { helpLink } from '../ui/help';
 import { esc } from '../core/utils';
 import type { Profile } from '@flashlab/shared';
 import { askConfirmation, notify, validateForm } from '../ui/feedback';
-import { translatePage, translateText } from '../core/i18n';
+import { translatePage, translateText, uiLocale } from '../core/i18n';
 import { mountMarkdown } from './blog/markdown';
 import {
   formatMarkdown,
@@ -83,8 +83,7 @@ export function initializeBlog(
   let search = '';
   let page = 1;
   const content = () => document.getElementById('content')!;
-  const locale = () =>
-    document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN';
+  const locale = uiLocale;
   const metadata = (article: Article) =>
     `<span data-user-content>${esc(article.author)}</span><span aria-hidden="true">·</span><time data-user-content datetime="${new Date(article.updated).toISOString()}">${new Date(article.updated).toLocaleDateString(locale(), { dateStyle: 'medium' })}</time>`;
   function listEntries() {
@@ -612,20 +611,17 @@ export function initializeBlog(
       }
     }
   };
+  document.addEventListener('flashlab-language-change', () => {
+    content()
+      .querySelectorAll<HTMLTimeElement>('.blog-meta time[datetime]')
+      .forEach((time) => {
+        time.textContent = new Date(time.dateTime).toLocaleDateString(
+          locale(),
+          { dateStyle: 'medium' },
+        );
+      });
+  });
   document.addEventListener('click', async (event) => {
-    if (
-      event.target instanceof Element &&
-      event.target.closest('[data-language]')
-    ) {
-      content()
-        .querySelectorAll<HTMLTimeElement>('.blog-meta time[datetime]')
-        .forEach((time) => {
-          time.textContent = new Date(time.dateTime).toLocaleDateString(
-            locale(),
-            { dateStyle: 'medium' },
-          );
-        });
-    }
     const target = (
       event.target instanceof Element ? event.target : null
     )?.closest<HTMLElement>(
