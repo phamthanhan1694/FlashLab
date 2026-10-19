@@ -1,5 +1,13 @@
 # FlashLab
 
+**Ngôn ngữ giao diện:** vào **Cài đặt → Ngôn ngữ**, chọn **Tiếng Việt, English, 한국어, 中文（简体） hoặc 日本語**. Lựa chọn được lưu riêng theo hồ sơ, áp dụng cho giao diện và Docs; nội dung thẻ, bài viết và ghi chú của bạn được giữ nguyên.
+
+**Tài liệu trong ứng dụng:** mở **Docs** trên thanh điều hướng để xem hướng dẫn bắt đầu, nhập/xuất thẻ, học tập, sao lưu và kết nối MCP.
+
+**Kết nối AI:** vào **Cài đặt → Kết nối AI qua MCP** để tạo cấu hình cho Claude Desktop/Codex đọc, tìm kiếm và quản lý thẻ, học phần của hồ sơ đang chọn. Xem [hướng dẫn MCP](docs/mcp.md).
+
+**Thời gian học:** mỗi chế độ có giới hạn giờ–phút–giây riêng, mặc định không giới hạn. Còn 1/3 thời gian sẽ hiện cảnh báo đỏ cố định. Kiểm tra hết giờ tự nộp và chỉ chấm câu đã xác nhận; các chế độ khác lưu phần đã học. Xem [cách chấm điểm, tiến độ và lịch ôn](docs/study.md).
+
 Ứng dụng học từ vựng và flashcard, có giao diện tiếng Việt/tiếng Anh, học phần, lớp học, hồ sơ người dùng, ghi chú cá nhân và bài viết Markdown. Hỗ trợ Thẻ ghi nhớ, Trắc nghiệm, Viết, Kiểm tra, Ghép cặp và Ôn tập cách quãng.
 
 FlashLab có bản web dùng backend Node.js và phần tích hợp desktop Tauri 2 dùng chung mã nguồn. Bản desktop được thiết kế tự khởi động backend và lưu dữ liệu trên máy, không cần mở máy chủ riêng.
